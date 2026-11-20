@@ -313,7 +313,11 @@ describe('API Client', () => {
           permission: false,
         },
       }
-      const loginData = { username: 'test', password: 'pass' }
+      const loginData = {
+  username: 'test',
+  password: 'pass',
+  turnstileToken: 'test_turnstile_token',
+}
 
       mockFetch.mockResolvedValueOnce(createMockResponse({
         ok: true,
