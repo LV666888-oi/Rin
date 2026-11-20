@@ -27,6 +27,7 @@ const WORKER_SECRET_KEYS = [
   "RIN_GITHUB_CLIENT_SECRET",
   "S3_ACCESS_KEY_ID",
   "S3_SECRET_ACCESS_KEY",
+  "TURNSTILE_SECRET_KEY",
 ] as const;
 
 function isQueueAlreadyPresentError(stderr: string) {
