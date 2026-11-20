@@ -22,9 +22,10 @@ describe("PasswordAuthService", () => {
     db = mockDB.db;
     sqlite = mockDB.sqlite;
     env = createMockEnv({
-      ADMIN_USERNAME: "admin",
-      ADMIN_PASSWORD: "admin123",
-    });
+    ADMIN_USERNAME: "admin",
+    ADMIN_PASSWORD: "admin123",
+    TURNSTILE_SECRET_KEY: "test_turnstile_secret",
+});
 
     // Setup Hono app with mock db
     app = new Hono<{ Bindings: Env; Variables: Variables }>();
