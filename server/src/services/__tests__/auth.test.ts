@@ -84,9 +84,10 @@ describe("PasswordAuthService", () => {
   describe("POST /auth/login - Login with credentials", () => {
     it("should login with admin credentials", async () => {
       const result = await api.auth.login({
-        username: "admin",
-        password: "admin123",
-      });
+  username: "admin",
+  password: "admin123",
+  turnstileToken: "test_turnstile_token",
+});
 
       expect(result.error).toBeUndefined();
       expect(result.data?.success).toBe(true);
