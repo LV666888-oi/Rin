@@ -10,7 +10,7 @@ import { siteName } from "../utils/constants";
 import type { PendingComment } from "../api/client";
 
 export function CommentsPage() {
-  const { t } = useTranslation();
+  useTranslation();
   const siteConfig = useSiteConfig();
   const { showAlert, AlertUI } = useAlert();
 
