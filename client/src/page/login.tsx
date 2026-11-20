@@ -47,17 +47,22 @@ export function LoginPage() {
         });
     }, []);
     // Load and render Cloudflare Turnstile
-    useEffect(() => {
-        let cancelled = false;
-        let script: HTMLScriptElement | null = null;
-        const renderWidget = () => {
-            if (cancelled || !turnstileRef.current || !window.turnstile) {
-                return;
-            }
-            if (widgetIdRef.current) {
-                window.turnstile.remove(widgetIdRef.current);
-                widgetIdRef.current = null;
-            }
+useEffect(() => {
+    let cancelled = false;
+    let widgetRendered = false;
+    let checkTimer: ReturnType<typeof setInterval> | null = null;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let script: HTMLScriptElement | null = null;
+    const renderWidget = () => {
+        if (
+            cancelled ||
+            widgetRendered ||
+            !turnstileRef.current ||
+            !window.turnstile
+        ) {
+            return;
+        }
+        try {
             widgetIdRef.current = window.turnstile.render(
                 turnstileRef.current,
                 {
@@ -72,42 +77,67 @@ export function LoginPage() {
                     },
                     "error-callback": () => {
                         setTurnstileToken("");
-                        setError("人机验证失败，请重新验证");
+                        setError("人机验证加载失败，请刷新页面重试");
                     },
                 }
             );
-        };
-        if (window.turnstile) {
-            renderWidget();
-        } else {
-            const existingScript =
-                document.querySelector<HTMLScriptElement>(
-                    'script[src*="challenges.cloudflare.com/turnstile"]'
-                );
-            script = existingScript || document.createElement("script");
-            const handleLoad = () => {
-                renderWidget();
-            };
-            script.addEventListener("load", handleLoad);
-            if (!existingScript) {
-                script.src =
-                    "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-                script.async = true;
-                script.defer = true;
-                document.head.appendChild(script);
+            widgetRendered = true;
+            if (checkTimer) {
+                clearInterval(checkTimer);
+                checkTimer = null;
             }
+            if (timeoutTimer) {
+                clearTimeout(timeoutTimer);
+                timeoutTimer = null;
+            }
+        } catch (err) {
+            setError("人机验证加载失败，请刷新页面重试");
         }
-        return () => {
-            cancelled = true;
-            if (script) {
-                script.removeEventListener("load", renderWidget);
+    };
+    // 如果 Turnstile 已经加载，直接渲染
+    if (window.turnstile) {
+        renderWidget();
+    } else {
+        // 查找已经存在的 Cloudflare 脚本
+        script = document.querySelector<HTMLScriptElement>(
+            'script[src*="challenges.cloudflare.com/turnstile"]'
+        );
+        // 如果不存在，则创建并加载
+        if (!script) {
+            script = document.createElement("script");
+            script.src =
+                "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+        // 持续检查脚本是否加载完成，避免错过 load 事件
+        checkTimer = setInterval(() => {
+            if (window.turnstile) {
+                renderWidget();
             }
-            if (widgetIdRef.current && window.turnstile) {
-                window.turnstile.remove(widgetIdRef.current);
-                widgetIdRef.current = null;
+        }, 200);
+        // 15 秒仍未加载则提示
+        timeoutTimer = setTimeout(() => {
+            if (!widgetRendered && !cancelled) {
+                setError("人机验证加载超时，请检查网络后刷新页面");
             }
-        };
-    }, []);
+        }, 15000);
+    }
+    return () => {
+        cancelled = true;
+        if (checkTimer) {
+            clearInterval(checkTimer);
+        }
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+        }
+        if (widgetIdRef.current && window.turnstile) {
+            window.turnstile.remove(widgetIdRef.current);
+            widgetIdRef.current = null;
+        }
+    };
+}, []);
     const handleLogin = async () => {
         if (!username || !password) {
             setError(t("login.error.empty"));
