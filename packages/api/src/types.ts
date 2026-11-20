@@ -132,6 +132,7 @@ export interface AuthStatus {
 export interface LoginRequest {
   username: string;
   password: string;
+  turnstileToken: string;
 }
 
 export interface LoginResponse {
