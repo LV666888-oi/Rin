@@ -16,16 +16,38 @@ describe("PasswordAuthService", () => {
   let env: Env;
   let app: Hono<{ Bindings: Env; Variables: Variables }>;
   let api: ReturnType<typeof createTestClient>;
+  let originalFetch: typeof fetch;
+
+  const testToken = "test_turnstile_token";
+  const testSecret = "test_turnstile_secret";
 
   beforeEach(async () => {
+    // Mock Cloudflare Turnstile verification
+    originalFetch = globalThis.fetch;
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          action: "login",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      )) as typeof fetch;
+
     const mockDB = createMockDB();
     db = mockDB.db;
     sqlite = mockDB.sqlite;
+
     env = createMockEnv({
-    ADMIN_USERNAME: "admin",
-    ADMIN_PASSWORD: "admin123",
-    TURNSTILE_SECRET_KEY: "test_turnstile_secret",
-});
+      ADMIN_USERNAME: "admin",
+      ADMIN_PASSWORD: "admin123",
+      TURNSTILE_SECRET_KEY: testSecret,
+    });
 
     // Setup Hono app with mock db
     app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -45,7 +67,7 @@ describe("PasswordAuthService", () => {
     });
 
     // Register service with prefix
-    app.route('/auth', PasswordAuthService());
+    app.route("/auth", PasswordAuthService());
 
     // Add error handler
     app.onError((err: any, c: any) => {
@@ -62,6 +84,7 @@ describe("PasswordAuthService", () => {
           err.statusCode,
         );
       }
+
       return c.json(
         {
           success: false,
@@ -78,16 +101,17 @@ describe("PasswordAuthService", () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     cleanupTestDB(sqlite);
   });
 
   describe("POST /auth/login - Login with credentials", () => {
     it("should login with admin credentials", async () => {
       const result = await api.auth.login({
-  username: "admin",
-  password: "admin123",
-  turnstileToken: "test_turnstile_token",
-});
+        username: "admin",
+        password: "admin123",
+        turnstileToken: testToken,
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.data?.success).toBe(true);
@@ -97,10 +121,10 @@ describe("PasswordAuthService", () => {
     });
 
     it("should create admin user on first login", async () => {
-      // First login - admin user doesn't exist yet
       const result = await api.auth.login({
         username: "admin",
         password: "admin123",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeUndefined();
@@ -108,7 +132,10 @@ describe("PasswordAuthService", () => {
       expect(result.data?.user.id).toBeDefined();
 
       // Verify admin user was created in database
-      const dbResult = sqlite.prepare(`SELECT * FROM users WHERE openid = 'admin'`).all() as any[];
+      const dbResult = sqlite
+        .prepare("SELECT * FROM users WHERE openid = 'admin'")
+        .all() as any[];
+
       expect(dbResult.length).toBe(1);
       expect(dbResult[0].username).toBe("admin");
       expect(dbResult[0].permission).toBe(1);
@@ -118,10 +145,12 @@ describe("PasswordAuthService", () => {
       const result = await api.auth.login({
         username: "admin",
         password: "wrongpassword",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeDefined();
       expect(result.error?.status).toBe(403);
+
       const errorData = result.error?.value as any;
       expect(errorData.error.message).toBe("Invalid credentials");
     });
@@ -129,13 +158,14 @@ describe("PasswordAuthService", () => {
     it("should login with regular user credentials", async () => {
       // Create a regular user with password
       sqlite.exec(`
-        INSERT INTO users (id, username, avatar, openid, password, permission) 
-        VALUES (2, 'regularuser', 'avatar.png', 'user_2', '${await hashPassword('userpass')}', 0)
+        INSERT INTO users (id, username, avatar, openid, password, permission)
+        VALUES (2, 'regularuser', 'avatar.png', 'user_2', '${await hashPassword("userpass")}', 0)
       `);
 
       const result = await api.auth.login({
         username: "regularuser",
         password: "userpass",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeUndefined();
@@ -148,10 +178,12 @@ describe("PasswordAuthService", () => {
       const result = await api.auth.login({
         username: "nonexistent",
         password: "somepassword",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeDefined();
       expect(result.error?.status).toBe(403);
+
       const errorData = result.error?.value as any;
       expect(errorData.error.message).toBe("Invalid credentials");
     });
@@ -160,24 +192,30 @@ describe("PasswordAuthService", () => {
       const result = await api.auth.login({
         username: "",
         password: "",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeDefined();
       expect(result.error?.status).toBe(400);
+
       const errorData = result.error?.value as any;
-      expect(errorData.error.message).toBe("Username and password are required");
+      expect(errorData.error.message).toBe(
+        "Username and password are required",
+      );
     });
 
     it("should return 400 if admin credentials not configured", async () => {
       const envNoCreds = createMockEnv({
         ADMIN_USERNAME: "",
         ADMIN_PASSWORD: "",
+        TURNSTILE_SECRET_KEY: testSecret,
       });
 
       const honoAppNoCreds = new Hono<{
         Bindings: Env;
         Variables: Variables;
       }>();
+
       honoAppNoCreds.use(async (c: any, next: any) => {
         c.set("db", db);
         c.set("jwt", {
@@ -191,9 +229,8 @@ describe("PasswordAuthService", () => {
         await next();
       });
 
-      honoAppNoCreds.route('/auth', PasswordAuthService());
+      honoAppNoCreds.route("/auth", PasswordAuthService());
 
-      // Add error handler
       honoAppNoCreds.onError((err: any, c: any) => {
         if (err.code && err.statusCode) {
           return c.json(
@@ -208,6 +245,7 @@ describe("PasswordAuthService", () => {
             err.statusCode,
           );
         }
+
         return c.json(
           {
             success: false,
@@ -231,28 +269,34 @@ describe("PasswordAuthService", () => {
       const result = await apiNoCreds.auth.login({
         username: "admin",
         password: "admin123",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeDefined();
       expect(result.error?.status).toBe(400);
+
       const errorData = result.error?.value as any;
-      expect(errorData.error.message).toBe("Admin credentials not configured");
+      expect(errorData.error.message).toBe(
+        "Admin credentials not configured",
+      );
     });
 
     it("should reject user without password", async () => {
       // Create a user without password
       sqlite.exec(`
-        INSERT INTO users (id, username, avatar, openid, password, permission) 
+        INSERT INTO users (id, username, avatar, openid, password, permission)
         VALUES (3, 'nopassworduser', 'avatar.png', 'user_3', NULL, 0)
       `);
 
       const result = await api.auth.login({
         username: "nopassworduser",
         password: "anypassword",
+        turnstileToken: testToken,
       });
 
       expect(result.error).toBeDefined();
       expect(result.error?.status).toBe(403);
+
       const errorData = result.error?.value as any;
       expect(errorData.error.message).toBe("Invalid credentials");
     });
@@ -263,8 +307,8 @@ describe("PasswordAuthService", () => {
       const result = await api.auth.status();
 
       expect(result.error).toBeUndefined();
-      expect(result.data?.github).toBe(true); // Has GitHub credentials in env
-      expect(result.data?.password).toBe(true); // Has admin credentials
+      expect(result.data?.github).toBe(true);
+      expect(result.data?.password).toBe(true);
     });
 
     it("should return false when credentials not configured", async () => {
@@ -279,14 +323,15 @@ describe("PasswordAuthService", () => {
         Bindings: Env;
         Variables: Variables;
       }>();
+
       honoAppNoCreds.use(async (c: any, next: any) => {
         c.set("db", db);
         c.set("env", envNoCreds);
         await next();
       });
-      honoAppNoCreds.route('/auth', PasswordAuthService());
 
-      // Add error handler
+      honoAppNoCreds.route("/auth", PasswordAuthService());
+
       honoAppNoCreds.onError((err: any, c: any) => {
         if (err.code && err.statusCode) {
           return c.json(
@@ -301,6 +346,7 @@ describe("PasswordAuthService", () => {
             err.statusCode,
           );
         }
+
         return c.json(
           {
             success: false,
@@ -313,7 +359,6 @@ describe("PasswordAuthService", () => {
         );
       });
 
-      // Add fetch method for test client compatibility
       const appNoCreds = {
         ...honoAppNoCreds,
         fetch: (request: Request, env: Env) =>
@@ -337,5 +382,6 @@ async function hashPassword(password: string): Promise<string> {
   const data = encoder.encode(password);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
