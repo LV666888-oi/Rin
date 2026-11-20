@@ -345,19 +345,44 @@ class TagAPI {
 /**
  * Comment API methods
  */
+export interface PendingComment {
+  id: number;
+  feedId: number;
+  userId: number | null;
+  content: string;
+  guestName: string | null;
+  guestWebsite: string | null;
+  approved: number;
+  createdAt: string | number;
+  feed: {
+    id: number;
+    title: string | null;
+  } | null;
+  user: {
+    id: number;
+    username: string;
+    avatar: string | null;
+    permission: number;
+  } | null;
+}
 class CommentAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/comment/:feed
   async list(feedId: number): Promise<ApiResponse<Comment[]>> {
     return this.http.get<Comment[]>(`/api/comment/${feedId}`);
   }
-
   // POST /api/comment/:feed
   async create(feedId: number, body: CreateCommentRequest): Promise<ApiResponse<Comment>> {
     return this.http.post<Comment>(`/api/comment/${feedId}`, body);
   }
-
+  // GET /api/comment/admin/pending
+  async pending(): Promise<ApiResponse<PendingComment[]>> {
+    return this.http.get<PendingComment[]>("/api/comment/admin/pending");
+  }
+  // POST /api/comment/admin/:id/approve
+  async approve(id: number): Promise<ApiResponse<{ success: boolean }>> {
+    return this.http.post<{ success: boolean }>(`/api/comment/admin/${id}/approve`);
+  }
   // DELETE /api/comment/:id
   async delete(id: number): Promise<ApiResponse<void>> {
     return this.http.delete<void>(`/api/comment/${id}`);
