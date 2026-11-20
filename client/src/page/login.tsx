@@ -32,7 +32,6 @@ export function LoginPage() {
 const [username, setUsername] = useState(’’);
 const [password, setPassword] = useState(’’);
 const [turnstileToken, setTurnstileToken] = useState(’’);
-const [turnstileReady, setTurnstileReady] = useState(false);
 const [authStatus, setAuthStatus] = useState<{ github: boolean; password: boolean }>({ github: false, password: false });
 const [isLoading, setIsLoading] = useState(false);
 const [error, setError] = useState(’’);
@@ -40,6 +39,7 @@ const [, setLocation] = useLocation();
 
 const turnstileRef = useRef<HTMLDivElement>(null);
 const widgetIdRef = useRef<string | null>(null);
+// Fetch auth status on mount
 useEffect(() => {
     client.auth.status().then(({ data }) => {
         if (data) {
@@ -47,8 +47,10 @@ useEffect(() => {
         }
     });
 }, []);
+// Load and render Cloudflare Turnstile
 useEffect(() => {
     let cancelled = false;
+    let script: HTMLScriptElement | null = null;
     const renderWidget = () => {
         if (cancelled || !turnstileRef.current || !window.turnstile) {
             return;
@@ -72,7 +74,6 @@ useEffect(() => {
                 setError("人机验证失败，请重新验证");
             },
         });
-        setTurnstileReady(true);
     };
     if (window.turnstile) {
         renderWidget();
@@ -80,28 +81,23 @@ useEffect(() => {
         const existingScript = document.querySelector<HTMLScriptElement>(
             'script[src*="challenges.cloudflare.com/turnstile"]'
         );
-        const script = existingScript || document.createElement("script");
-        const handleLoad = () => renderWidget();
+        script = existingScript || document.createElement("script");
+        const handleLoad = () => {
+            renderWidget();
+        };
         script.addEventListener("load", handleLoad);
         if (!existingScript) {
             script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
             script.async = true;
             script.defer = true;
             document.head.appendChild(script);
-        } else if (window.turnstile) {
-            renderWidget();
         }
-        return () => {
-            cancelled = true;
-            script.removeEventListener("load", handleLoad);
-            if (widgetIdRef.current && window.turnstile) {
-                window.turnstile.remove(widgetIdRef.current);
-                widgetIdRef.current = null;
-            }
-        };
     }
     return () => {
         cancelled = true;
+        if (script) {
+            script.removeEventListener("load", renderWidget);
+        }
         if (widgetIdRef.current && window.turnstile) {
             window.turnstile.remove(widgetIdRef.current);
             widgetIdRef.current = null;
@@ -130,6 +126,7 @@ const handleLogin = async () => {
             return;
         }
         if (data?.success) {
+            // Save token to localStorage for cross-domain auth
             if (data.token) {
                 setAuthToken(data.token);
             }
@@ -148,9 +145,11 @@ return (
     <div className="flex items-center justify-center my-8">
         <div className="bg-w w-full max-w-md flex flex-col items-center justify-between p-8 space-y-4 t-primary rounded-2xl shadow-lg">
             <p className="text-2xl font-bold">{t('login.title')}</p>
+            {/* Error message */}
             {error && (
                 <p className="text-sm text-red-500">{error}</p>
             )}
+            {/* Password login form */}
             {authStatus.password && (
                 <>
                     <Input
@@ -168,6 +167,7 @@ return (
                         onSubmit={handleLogin}
                         disabled={isLoading}
                     />
+                    {/* Cloudflare Turnstile */}
                     <div className="flex justify-center pt-2">
                         <div ref={turnstileRef}></div>
                     </div>
@@ -180,6 +180,7 @@ return (
                     </div>
                 </>
             )}
+            {/* OAuth options */}
             {authStatus.github && (
                 <div className="flex flex-col justify-center items-center space-y-2 pt-2">
                     {authStatus.password && <p className="text-xs t-secondary">{t('login.or')}</p>}
@@ -191,6 +192,7 @@ return (
                     </div>
                 </div>
             )}
+            {/* No auth methods available */}
             {!authStatus.github && !authStatus.password && (
                 <p className="text-sm text-red-500">{t('login.no_methods')}</p>
             )}
