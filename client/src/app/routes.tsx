@@ -27,6 +27,7 @@ import { SearchPage } from "../page/search";
 import { Settings } from "../page/settings";
 import { TimelinePage } from "../page/timeline";
 import { WritingPage } from "../page/writing";
+import { CommentsPage } from "../page/comments";
 import { ProfileContext } from "../state/profile";
 import { tryInt } from "../utils/int";
 import { useTranslation } from "react-i18next";
@@ -63,6 +64,15 @@ export function AppRoutes() {
       <AppRoute path="/search/:keyword">
         {(params) => <SearchPage keyword={params.keyword || ""} />}
       </AppRoute>
+
+      <AdminRoute
+        path="/admin/comments"
+        requirePermission
+        title="评论审核"
+        description="管理游客和普通用户提交的待审核评论"
+      >
+        <CommentsPage />
+      </AdminRoute>
 
       <AdminRoute path="/admin/settings" requirePermission title={t("settings.title")} description={t("admin.settings_description")}>
         <Settings />
@@ -185,6 +195,7 @@ function AdminRoute({
 }) {
   const profile = useContext(ProfileContext);
   const { t } = useTranslation();
+
   const content =
     requirePermission && !profile?.permission ? <ErrorPage error={t("error.permission_denied")} /> : children;
 
