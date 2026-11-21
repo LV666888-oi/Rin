@@ -22,6 +22,29 @@ import mermaid from "mermaid";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
 import { stripImageUrlMetadata } from "../utils/image-upload";
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          action: string;
+          callback: (token: string) => void;
+          "expired-callback": () => void;
+          "error-callback": () => void;
+        }
+      ) => string;
+      remove: (widgetId: string) => void;
+      reset: (widgetId: string) => void;
+    };
+  }
+}
+
+const TURNSTILE_SITE_KEY = "0x4AAAAAAGKowduOW9jDZSdd";
+const TURNSTILE_SCRIPT_URL =
+  "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+
 function extractFirstMarkdownImageUrl(content: string) {
   const match = /!\[.*?\]\((\S+?)(?:\s+"[^"]*")?\)/.exec(content);
   if (!match) {
@@ -372,6 +395,9 @@ function CommentInput({
   const [guestEmail, setGuestEmail] = useState("");
   const [guestWebsite, setGuestWebsite] = useState("");
   const [error, setError] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [captchaReady, setCaptchaReady] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const [, setLocation] = useLocation();
@@ -380,65 +406,201 @@ function CommentInput({
   const rawGuest = config.get('comment.guest.enabled');
   const guestEnabled = rawGuest !== false && rawGuest !== 'false';
 
+  const isAdmin = Boolean(profile?.permission);
+  const requiresCaptcha = !isAdmin && (Boolean(profile) || guestEnabled);
+
+  const captchaContainerRef = useRef<HTMLDivElement>(null);
+  const captchaWidgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!requiresCaptcha) {
+      setCaptchaReady(true);
+      return;
+    }
+
+    let disposed = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const renderCaptcha = () => {
+      if (disposed || !captchaContainerRef.current || !window.turnstile) {
+        return false;
+      }
+
+      if (captchaWidgetIdRef.current) {
+        return true;
+      }
+
+      try {
+        captchaWidgetIdRef.current = window.turnstile.render(
+          captchaContainerRef.current,
+          {
+            sitekey: TURNSTILE_SITE_KEY,
+            action: "comment",
+            callback: (token) => {
+              setTurnstileToken(token);
+              setError("");
+            },
+            "expired-callback": () => {
+              setTurnstileToken("");
+              setError("人机验证已过期，请重新验证");
+            },
+            "error-callback": () => {
+              setTurnstileToken("");
+              setError("人机验证加载失败，请刷新页面后重试");
+            },
+          }
+        );
+
+        setCaptchaReady(true);
+        return true;
+      } catch {
+        setError("人机验证加载失败，请刷新页面后重试");
+        return false;
+      }
+    };
+
+    const existingScript = document.querySelector(
+      'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
+    ) as HTMLScriptElement | null;
+
+    if (!existingScript) {
+      const script = document.createElement("script");
+      script.src = TURNSTILE_SCRIPT_URL;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        renderCaptcha();
+      };
+      script.onerror = () => {
+        if (!disposed) {
+          setError("人机验证脚本加载失败，请刷新页面后重试");
+        }
+      };
+      document.head.appendChild(script);
+    }
+
+    intervalId = setInterval(() => {
+      if (renderCaptcha() && intervalId) {
+        clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    }, 300);
+
+    renderCaptcha();
+
+    return () => {
+      disposed = true;
+
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+
+      if (captchaWidgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(captchaWidgetIdRef.current);
+        captchaWidgetIdRef.current = null;
+      }
+    };
+  }, [requiresCaptcha]);
+
+  function resetCaptcha() {
+    setTurnstileToken("");
+
+    if (captchaWidgetIdRef.current && window.turnstile) {
+      window.turnstile.reset(captchaWidgetIdRef.current);
+    }
+  }
+
   function errorHumanize(error: string) {
     if (error === "Unauthorized") return t("login.required");
     else if (error === "Content is required") return t("comment.empty");
     else if (error === "Guest name is required") return t("comment.guest_name_required");
+    else if (error === "Invalid Turnstile token") return "人机验证失败，请重新验证";
+    else if (error === "Turnstile verification failed") return "人机验证失败，请重新验证";
     return error;
   }
 
-  function submit() {
-    if (profile) {
-      client.comment
-        .create(parseInt(id), { content })
-        .then(({ error }) => {
-          if (error) {
-            setError(errorHumanize(error.value as string));
-          } else {
-            setContent("");
-            setError("");
+  async function submit() {
+    if (submitting) {
+      return;
+    }
 
-            const successMessage = profile.permission
-              ? "评论发布成功"
-              : "评论已提交，等待管理员审核";
+    if (requiresCaptcha && !turnstileToken) {
+      setError("请先完成人机验证");
+      return;
+    }
 
-            showAlert(successMessage, () => {
-              onRefresh();
-            });
+    if (profile && !content.trim()) {
+      setError(t("comment.empty"));
+      return;
+    }
+
+    if (!profile && guestEnabled && !guestName.trim()) {
+      setError(t("comment.guest_name_required"));
+      return;
+    }
+
+    if (!profile && !guestEnabled) {
+      setLocation('/login');
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const requestData = profile
+        ? {
+            content,
+            ...(requiresCaptcha ? { turnstileToken } : {}),
           }
-        });
-    } else if (guestEnabled) {
-      if (!guestName.trim()) {
-        setError(t("comment.guest_name_required"));
+        : {
+            content,
+            guestName: guestName.trim(),
+            guestEmail: guestEmail.trim() || undefined,
+            guestWebsite: guestWebsite.trim() || undefined,
+            turnstileToken,
+          };
+
+      const result = await client.comment.create(
+        parseInt(id),
+        requestData
+      );
+
+      if (result.error) {
+        setError(errorHumanize(result.error.value as string));
+        resetCaptcha();
         return;
       }
 
-      client.comment
-        .create(parseInt(id), {
-          content,
-          guestName: guestName.trim(),
-          guestEmail: guestEmail.trim() || undefined,
-          guestWebsite: guestWebsite.trim() || undefined,
-        })
-        .then(({ error }) => {
-          if (error) {
-            setError(errorHumanize(error.value as string));
-          } else {
-            setContent("");
-            setGuestName("");
-            setGuestEmail("");
-            setGuestWebsite("");
-            setError("");
+      setContent("");
+      setError("");
 
-            showAlert("评论已提交，等待管理员审核", () => {
-              onRefresh();
-            });
-          }
-        });
-    } else {
-      setLocation('/login');
+      if (!profile) {
+        setGuestName("");
+        setGuestEmail("");
+        setGuestWebsite("");
+      }
+
+      resetCaptcha();
+
+      const successMessage = isAdmin
+        ? "评论发布成功"
+        : "评论已提交，等待管理员审核";
+
+      showAlert(successMessage, () => {
+        onRefresh();
+      });
+    } catch {
+      setError("评论提交失败，请稍后重试");
+      resetCaptcha();
+    } finally {
+      setSubmitting(false);
     }
   }
+
+  const canSubmit =
+    !submitting &&
+    (!requiresCaptcha || Boolean(turnstileToken));
 
   return (
     <div className="w-full rounded-2xl bg-w t-primary p-6 items-end flex flex-col">
@@ -455,11 +617,19 @@ function CommentInput({
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+
+          {requiresCaptcha && (
+            <div className="w-full mt-4">
+              <div ref={captchaContainerRef} />
+            </div>
+          )}
+
           <button
-            className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
+            className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={submit}
+            disabled={!canSubmit}
           >
-            {t("comment.submit")}
+            {submitting ? "提交中..." : t("comment.submit")}
           </button>
         </>
       ) : guestEnabled ? (
@@ -492,11 +662,19 @@ function CommentInput({
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
+
+          {requiresCaptcha && (
+            <div className="w-full mt-4">
+              <div ref={captchaContainerRef} />
+            </div>
+          )}
+
           <button
-            className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
+            className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={submit}
+            disabled={!canSubmit}
           >
-            {t("comment.submit")}
+            {submitting ? "提交中..." : t("comment.submit")}
           </button>
         </>
       ) : (
