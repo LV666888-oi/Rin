@@ -254,7 +254,9 @@ content={hashtags.map(({ name }) => name).join(”, “)}
                 {profile?.permission && (
                   <div className="flex gap-2">
                     <button
-                      aria-label={top > 0 ? t("untop.title") : t("top.title")}
+                      aria-label={
+                        top > 0 ? t("untop.title") : t("top.title")
+                      }
                       onClick={topFeed}
                       className={`flex-1 flex flex-col items-end justify-center px-2 py rounded-full transition ${
                         top > 0
@@ -610,7 +612,7 @@ type=“button”
 onClick={() => setIsOpened(true)}
 className=“rounded-full bg-black px-8 py-3 text-white transition hover:bg-gray-800 active:bg-gray-900 dark:bg-white dark:text-black dark:hover:bg-gray-200”
 >
-评论
+写下你的留言
   <Modal
     isOpen={isOpened}
     onRequestClose={closeModal}
@@ -627,13 +629,13 @@ className=“rounded-full bg-black px-8 py-3 text-white transition hover:bg-gray
           type="button"
           onClick={closeModal}
           aria-label="关闭"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-3xl text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-800"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-3xl text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-800"
         >
           ×
         </button>
       </div>
       <div className="p-6 sm:p-10">
-        {!profile && guestEnabled ? (
+        {!profile && guestEnabled && (
           <div className="mb-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="min-w-0">
               <label className="mb-2 block text-lg font-medium">
@@ -648,18 +650,17 @@ className=“rounded-full bg-black px-8 py-3 text-white transition hover:bg-gray
               />
             </div>
             <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="mb-2 flex items-center gap-2">
                 <label className="text-lg font-medium">
                   邮箱
                 </label>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  (仅用于通知审核状态不会公开给他人)
-                </span>
                 <button
                   type="button"
                   aria-label="邮箱用途说明"
                   aria-expanded={showEmailHelp}
-                  onClick={() => setShowEmailHelp((value) => !value)}
+                  onClick={() =>
+                    setShowEmailHelp((value) => !value)
+                  }
                   className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-gray-400 text-sm font-semibold text-gray-500 transition hover:border-gray-700 hover:text-gray-900 dark:border-neutral-500 dark:text-gray-300"
                 >
                   ?
@@ -679,7 +680,7 @@ className=“rounded-full bg-black px-8 py-3 text-white transition hover:bg-gray
               />
             </div>
           </div>
-        ) : null}
+        )}
         {!profile && !guestEnabled ? (
           <div className="flex w-full flex-col items-center justify-center py-12">
             <p className="mb-4 text-gray-500">
@@ -783,11 +784,13 @@ return (
 {config.getBoolean(“comment.enabled”) && (
 评论
 {comments.length} 条留言
+        <CommentInput id={id} onRefresh={loadComments} />
+      </div>
       {error && (
-        <div className="flex flex-col items-center justify-center rounded-2xl bg-w t-primary m-2 p-6">
+        <div className="flex flex-col wauto rounded-2xl bg-w t-primary m-2 p-6 items-center justify-center">
           <h1 className="text-xl font-bold t-primary">{error}</h1>
           <button
-            className="mt-2 rounded-full bg-theme px-4 py-2 text-white"
+            className="mt-2 bg-theme text-white px-4 py-2 rounded-full"
             onClick={loadComments}
           >
             {t("reload")}
@@ -795,7 +798,7 @@ return (
         </div>
       )}
       {comments.length > 0 ? (
-        <div className="mt-4 w-full">
+        <div className="w-full">
           {comments.map((comment) => (
             <CommentItem
               key={comment.id}
@@ -857,7 +860,7 @@ return (
           rel="noopener noreferrer"
           className="shrink-0 text-gray-400 transition-colors hover:text-theme"
         >
-          <i className="ri-external-link-line" />
+          <i className="ri-external-link-line"></i>
         </a>
       )}
       <div className="flex-1 w-0" />
@@ -877,19 +880,19 @@ return (
         <Popup
           arrow={false}
           trigger={
-            <button className="rounded-full bg-secondary px-2 py">
-              <i className="ri-more-fill t-secondary" />
+            <button className="px-2 py bg-secondary rounded-full">
+              <i className="ri-more-fill t-secondary"></i>
             </button>
           }
           position="left center"
         >
-          <div className="mr-2 flex flex-row self-end">
+          <div className="flex flex-row self-end mr-2">
             <button
               onClick={deleteComment}
               aria-label={t("delete.comment.title")}
-              className="rounded-full bg-secondary px-2 py"
+              className="px-2 py bg-secondary rounded-full"
             >
-              <i className="ri-delete-bin-2-line t-secondary" />
+              <i className="ri-delete-bin-2-line t-secondary"></i>
             </button>
           </div>
         </Popup>
