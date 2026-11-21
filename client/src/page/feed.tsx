@@ -48,8 +48,8 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const hasAISummary = Boolean(feed?.ai_summary?.trim());
   const showAISummaryState = feed?.ai_summary_status === "pending" || feed?.ai_summary_status === "processing" || feed?.ai_summary_status === "failed";
   const hashtags = Array.isArray(feed?.hashtags) ? feed.hashtags : [];
+
   function deleteFeed() {
-    // Confirm
     showConfirm(
       t("article.delete.title"),
       t("article.delete.confirm"),
@@ -67,10 +67,10 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           });
       })
   }
+
   function topFeed() {
     const isUnTop = !(top > 0)
     const topNew = isUnTop ? 1 : 0;
-    // Confirm
     showConfirm(
       isUnTop ? t("article.top.title") : t("article.untop.title"),
       isUnTop ? t("article.top.confirm") : t("article.untop.confirm"),
@@ -88,6 +88,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           });
       })
   }
+
   useEffect(() => {
     if (ref.current == id) return;
     setFeed(undefined);
@@ -112,6 +113,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       });
     ref.current = id;
   }, [id]);
+
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
@@ -165,6 +167,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           />
         </Helmet>
       )}
+
       <div className="w-full flex flex-row justify-center ani-show">
         {error && (
           <>
@@ -180,6 +183,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
             </div>
           </>
         )}
+
         {feed && !error && (
           <>
             <div className="xl:w-64" />
@@ -211,17 +215,15 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                         </p>
                       )}
                     </div>
+
                     {counterEnabled && <p className='text-[12px] text-gray-400 font-normal link-line'>
                       <span> {t("count.pv")} </span>
-                      <span>
-                        {feed.pv}
-                      </span>
+                      <span>{feed.pv}</span>
                       <span> |</span>
                       <span> {t("count.uv")} </span>
-                      <span>
-                        {feed.uv}
-                      </span>
+                      <span>{feed.uv}</span>
                     </p>}
+
                     <div className="flex flex-row items-center">
                       <h1 className="text-2xl font-bold t-primary break-all">
                         {feed.title}
@@ -229,6 +231,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       <div className="flex-1 w-0" />
                     </div>
                   </div>
+
                   <div className="pt-2">
                     {profile?.permission && (
                       <div className="flex gap-2">
@@ -257,6 +260,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                     )}
                   </div>
                 </div>
+
                 {(hasAISummary || showAISummaryState) && (
                   <div className="my-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-100 dark:border-purple-800/30">
                     <div className="flex items-center justify-between gap-2 mb-2">
@@ -282,7 +286,9 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                     ) : null}
                   </div>
                 )}
+
                 <Markdown content={feed.content} />
+
                 <div className="mt-6 flex flex-col gap-2">
                   {hashtags.length > 0 && (
                     <div className="flex flex-row flex-wrap gap-x-2">
@@ -291,6 +297,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       ))}
                     </div>
                   )}
+
                   <div className="flex min-w-0 flex-row items-center">
                     <ImageWithFallback
                       src={feed.user.avatar || "/avatar.png"}
@@ -305,20 +312,21 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                   </div>
                 </div>
               </article>
+
               {id !== "about" && <AdjacentSection id={id} setError={setError} />}
               {feed && <Comments id={`${feed.id}`} />}
               <div className="h-16" />
             </main>
+
             <div className="w-80 hidden lg:block relative">
-              <div
-                className={`start-0 end-0 top-[5.5rem] sticky`}
-              >
+              <div className={`start-0 end-0 top-[5.5rem] sticky`}>
                 <TOC />
               </div>
             </div>
           </>
         )}
       </div>
+
       <AlertUI />
       <ConfirmUI />
     </Waiting>
@@ -368,15 +376,17 @@ function CommentInput({
   const profile = useContext(ProfileContext);
   const [, setLocation] = useLocation();
   const config = useContext(ClientConfigContext);
-  // guest comments enabled by default; admin can disable via client config `comment.guest.enabled=false`
+
   const rawGuest = config.get('comment.guest.enabled');
   const guestEnabled = rawGuest !== false && rawGuest !== 'false';
+
   function errorHumanize(error: string) {
     if (error === "Unauthorized") return t("login.required");
     else if (error === "Content is required") return t("comment.empty");
     else if (error === "Guest name is required") return t("comment.guest_name_required");
     return error;
   }
+
   function submit() {
     if (profile) {
       client.comment
@@ -387,7 +397,12 @@ function CommentInput({
           } else {
             setContent("");
             setError("");
-            showAlert(t("comment.success"), () => {
+
+            const successMessage = profile.permission
+              ? "评论发布成功"
+              : "评论已提交，等待管理员审核";
+
+            showAlert(successMessage, () => {
               onRefresh();
             });
           }
@@ -397,6 +412,7 @@ function CommentInput({
         setError(t("comment.guest_name_required"));
         return;
       }
+
       client.comment
         .create(parseInt(id), {
           content,
@@ -413,7 +429,8 @@ function CommentInput({
             setGuestEmail("");
             setGuestWebsite("");
             setError("");
-            showAlert(t("comment.success"), () => {
+
+            showAlert("评论已提交，等待管理员审核", () => {
               onRefresh();
             });
           }
@@ -422,61 +439,67 @@ function CommentInput({
       setLocation('/login');
     }
   }
+
   return (
     <div className="w-full rounded-2xl bg-w t-primary p-6 items-end flex flex-col">
       <div className="flex flex-col w-full items-start mb-4">
         <label htmlFor="comment">{t("comment.title")}</label>
       </div>
-      {profile ? (<>
-        <textarea
-          id="comment"
-          placeholder={t("comment.placeholder.title")}
-          className="bg-w w-full h-24 rounded-lg"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-        />
-        <button
-          className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
-          onClick={submit}
-        >
-          {t("comment.submit")}
-        </button>
-      </>) : guestEnabled ? (<>
-        <input
-          type="text"
-          placeholder={t("comment.guest_name_placeholder")}
-          className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
-          value={guestName}
-          onChange={(e) => setGuestName(e.target.value)}
-        />
-        <input
-          type="email"
-          placeholder={t("comment.guest_email_placeholder")}
-          className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
-          value={guestEmail}
-          onChange={(e) => setGuestEmail(e.target.value)}
-        />
-        <input
-          type="url"
-          placeholder={t("comment.guest_website_placeholder")}
-          className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
-          value={guestWebsite}
-          onChange={(e) => setGuestWebsite(e.target.value)}
-        />
-        <textarea
-          id="comment"
-          placeholder={t("comment.placeholder.title")}
-          className="bg-w w-full h-24 rounded-lg"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-        />
-        <button
-          className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
-          onClick={submit}
-        >
-          {t("comment.submit")}
-        </button>
-      </>) : (
+
+      {profile ? (
+        <>
+          <textarea
+            id="comment"
+            placeholder={t("comment.placeholder.title")}
+            className="bg-w w-full h-24 rounded-lg"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <button
+            className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
+            onClick={submit}
+          >
+            {t("comment.submit")}
+          </button>
+        </>
+      ) : guestEnabled ? (
+        <>
+          <input
+            type="text"
+            placeholder={t("comment.guest_name_placeholder")}
+            className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
+            value={guestName}
+            onChange={(e) => setGuestName(e.target.value)}
+          />
+          <input
+            type="email"
+            placeholder={t("comment.guest_email_placeholder")}
+            className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
+            value={guestEmail}
+            onChange={(e) => setGuestEmail(e.target.value)}
+          />
+          <input
+            type="url"
+            placeholder={t("comment.guest_website_placeholder")}
+            className="bg-w w-full rounded-lg px-3 py-2 mb-2 border border-gray-200 dark:border-gray-700"
+            value={guestWebsite}
+            onChange={(e) => setGuestWebsite(e.target.value)}
+          />
+          <textarea
+            id="comment"
+            placeholder={t("comment.placeholder.title")}
+            className="bg-w w-full h-24 rounded-lg"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+          <button
+            className="mt-4 bg-theme text-white px-4 py-2 rounded-full"
+            onClick={submit}
+          >
+            {t("comment.submit")}
+          </button>
+        </>
+      ) : (
         <div className="flex flex-row w-full items-center justify-center space-x-2 py-12">
           <button
             className="mt-2 bg-theme text-white px-4 py-2 rounded-full"
@@ -486,6 +509,7 @@ function CommentInput({
           </button>
         </div>
       )}
+
       {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
       <AlertUI />
     </div>
@@ -526,16 +550,19 @@ function Comments({ id }: { id: string }) {
         }
       });
   }
+
   useEffect(() => {
     if (ref.current == id) return;
     loadComments();
     ref.current = id;
   }, [id]);
+
   return (
     <>
       {config.getBoolean('comment.enabled') &&
         <div className="m-2 flex flex-col justify-center items-center">
           <CommentInput id={id} onRefresh={loadComments} />
+
           {error && (
             <>
               <div className="flex flex-col wauto rounded-2xl bg-w t-primary m-2 p-6 items-center justify-center">
@@ -549,6 +576,7 @@ function Comments({ id }: { id: string }) {
               </div>
             </>
           )}
+
           {comments.length > 0 && (
             <div className="w-full">
               {comments.map((comment) => (
@@ -579,6 +607,7 @@ function CommentItem({
   const profile = useContext(ProfileContext);
   const commenterName = comment.user?.username || comment.guestName || t("anonymous");
   const commenterAvatar = comment.user?.avatar || "/avatar.png";
+
   function deleteComment() {
     showConfirm(
       t("delete.comment.title"),
@@ -597,6 +626,7 @@ function CommentItem({
           });
       })
   }
+
   return (
     <div className="flex flex-row items-start rounded-xl mt-2">
       <ImageWithFallback
@@ -604,11 +634,13 @@ function CommentItem({
         alt={commenterName}
         className="mt-4 h-8 w-8 rounded-full"
       />
+
       <div className="flex flex-col flex-1 w-0 ml-2 bg-w rounded-xl p-4">
         <div className="flex min-w-0 flex-row items-center gap-2">
           <span className="min-w-0 truncate text-base font-bold t-primary">
             {commenterName}
           </span>
+
           {comment.guestWebsite && (
             <a
               href={comment.guestWebsite}
@@ -619,7 +651,9 @@ function CommentItem({
               <i className="ri-external-link-line"></i>
             </a>
           )}
+
           <div className="flex-1 w-0" />
+
           <span
             title={new Date(comment.createdAt).toLocaleString()}
             className="shrink-0 text-sm text-gray-400"
@@ -627,7 +661,9 @@ function CommentItem({
             {timeago(comment.createdAt)}
           </span>
         </div>
+
         <p className="break-words t-primary [overflow-wrap:anywhere]">{comment.content}</p>
+
         <div className="flex flex-row justify-end">
           {(profile?.permission || (comment.user && profile?.id == comment.user.id)) && (
             <Popup
@@ -652,6 +688,7 @@ function CommentItem({
           )}
         </div>
       </div>
+
       <ConfirmUI />
       <AlertUI />
     </div>
