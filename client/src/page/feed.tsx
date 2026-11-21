@@ -402,6 +402,7 @@ function CommentInput({
   const [error, setError] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const [, setLocation] = useLocation();
@@ -523,6 +524,11 @@ function CommentInput({
       return;
     }
 
+    if (!agreed) {
+      setError("请先阅读并同意评论发表协议");
+      return;
+    }
+
     if (requiresCaptcha && !turnstileToken) {
       setError("请先完成人机验证");
       return;
@@ -567,12 +573,14 @@ function CommentInput({
 
       if (result.error) {
         setError(errorHumanize(result.error.value as string));
+        setAgreed(false);
         resetCaptcha();
         return;
       }
 
       setContent("");
       setError("");
+      setAgreed(false);
 
       if (!profile) {
         setGuestName("");
@@ -591,6 +599,7 @@ function CommentInput({
       });
     } catch {
       setError("评论提交失败，请稍后重试");
+      setAgreed(false);
       resetCaptcha();
     } finally {
       setSubmitting(false);
@@ -599,7 +608,30 @@ function CommentInput({
 
   const canSubmit =
     !submitting &&
+    agreed &&
     (!requiresCaptcha || Boolean(turnstileToken));
+
+  const agreementCheckbox = (
+    <label className="mt-4 flex w-full items-center gap-2 text-sm text-gray-500">
+      <input
+        type="checkbox"
+        checked={agreed}
+        onChange={(e) => setAgreed(e.target.checked)}
+        className="h-4 w-4 accent-current"
+      />
+      <span>
+        发表评论表示你同意
+        <a
+          href="https://blog.otaoi.top/feed/1"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-theme underline"
+        >
+          《评论发表协议》
+        </a>
+      </span>
+    </label>
+  );
 
   return (
     <div className="w-full rounded-2xl bg-w t-primary p-6 items-end flex flex-col">
@@ -622,6 +654,8 @@ function CommentInput({
               <div ref={captchaContainerRef} />
             </div>
           )}
+
+          {agreementCheckbox}
 
           <button
             className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
@@ -670,6 +704,8 @@ function CommentInput({
               <div ref={captchaContainerRef} />
             </div>
           )}
+
+          {agreementCheckbox}
 
           <button
             className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
