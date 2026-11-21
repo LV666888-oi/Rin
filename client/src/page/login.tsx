@@ -1,4 +1,4 @@
-import { t } from “i18next”;
+import { t } from "i18next";
 import { useEffect, useRef, useState } from “react”;
 import { useLocation } from “wouter”;
 import { ButtonWithLoading } from “../components/button”;
