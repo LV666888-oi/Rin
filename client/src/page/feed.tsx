@@ -21,7 +21,6 @@ import { Tips } from "../components/tips";
 import mermaid from "mermaid";
 import { AdjacentSection } from "../components/adjacent_feed.tsx";
 import { stripImageUrlMetadata } from "../utils/image-upload";
-
 declare global {
   interface Window {
     turnstile?: {
@@ -40,20 +39,16 @@ declare global {
     };
   }
 }
-
 const TURNSTILE_SITE_KEY = "0x4AAAAAAGKowduOW9jDZSdd";
 const TURNSTILE_SCRIPT_URL =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-
 function extractFirstMarkdownImageUrl(content: string) {
   const match = /!\[.*?\]\((\S+?)(?:\s+"[^"]*")?\)/.exec(content);
   if (!match) {
     return undefined;
   }
-
   return stripImageUrlMetadata(match[1]);
 }
-
 export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Element, clean: (id: string) => void }) {
   const { t } = useTranslation();
   const siteConfig = useSiteConfig();
@@ -71,7 +66,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
   const hasAISummary = Boolean(feed?.ai_summary?.trim());
   const showAISummaryState = feed?.ai_summary_status === "pending" || feed?.ai_summary_status === "processing" || feed?.ai_summary_status === "failed";
   const hashtags = Array.isArray(feed?.hashtags) ? feed.hashtags : [];
-
   function deleteFeed() {
     showConfirm(
       t("article.delete.title"),
@@ -90,7 +84,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           });
       })
   }
-
   function topFeed() {
     const isUnTop = !(top > 0)
     const topNew = isUnTop ? 1 : 0;
@@ -111,7 +104,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           });
       })
   }
-
   useEffect(() => {
     if (ref.current == id) return;
     setFeed(undefined);
@@ -136,7 +128,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       });
     ref.current = id;
   }, [id]);
-
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
@@ -156,7 +147,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
       });
     })
   }, [feed]);
-
   return (
     <Waiting for={feed || error}>
       {feed && (
@@ -190,7 +180,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           />
         </Helmet>
       )}
-
       <div className="w-full flex flex-row justify-center ani-show">
         {error && (
           <>
@@ -206,7 +195,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
             </div>
           </>
         )}
-
         {feed && !error && (
           <>
             <div className="xl:w-64" />
@@ -226,7 +214,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                           time: timeago(feed.createdAt),
                         })}
                       </p>
-
                       {feed.createdAt !== feed.updatedAt && (
                         <p
                           className="text-gray-400 text-[12px]"
@@ -238,7 +225,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                         </p>
                       )}
                     </div>
-
                     {counterEnabled && <p className='text-[12px] text-gray-400 font-normal link-line'>
                       <span> {t("count.pv")} </span>
                       <span>{feed.pv}</span>
@@ -246,7 +232,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       <span> {t("count.uv")} </span>
                       <span>{feed.uv}</span>
                     </p>}
-
                     <div className="flex flex-row items-center">
                       <h1 className="text-2xl font-bold t-primary break-all">
                         {feed.title}
@@ -254,7 +239,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       <div className="flex-1 w-0" />
                     </div>
                   </div>
-
                   <div className="pt-2">
                     {profile?.permission && (
                       <div className="flex gap-2">
@@ -283,7 +267,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                     )}
                   </div>
                 </div>
-
                 {(hasAISummary || showAISummaryState) && (
                   <div className="my-4 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-100 dark:border-purple-800/30">
                     <div className="flex items-center justify-between gap-2 mb-2">
@@ -309,9 +292,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                     ) : null}
                   </div>
                 )}
-
                 <Markdown content={feed.content} />
-
                 <div className="mt-6 flex flex-col gap-2">
                   {hashtags.length > 0 && (
                     <div className="flex flex-row flex-wrap gap-x-2">
@@ -320,7 +301,6 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                       ))}
                     </div>
                   )}
-
                   <div className="flex min-w-0 flex-row items-center">
                     <ImageWithFallback
                       src={feed.user.avatar || "/avatar.png"}
@@ -335,12 +315,10 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
                   </div>
                 </div>
               </article>
-
               {id !== "about" && <AdjacentSection id={id} setError={setError} />}
               {feed && <Comments id={`${feed.id}`} />}
               <div className="h-16" />
             </main>
-
             <div className="w-80 hidden lg:block relative">
               <div className={`start-0 end-0 top-[5.5rem] sticky`}>
                 <TOC />
@@ -349,16 +327,13 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           </>
         )}
       </div>
-
       <AlertUI />
       <ConfirmUI />
     </Waiting>
   );
 }
-
 export function TOCHeader({ TOC }: { TOC: () => JSX.Element }) {
   const [isOpened, setIsOpened] = useState(false);
-
   return (
     <div className="shrink-0 lg:hidden">
       <button
@@ -381,7 +356,6 @@ export function TOCHeader({ TOC }: { TOC: () => JSX.Element }) {
     </div>
   );
 }
-
 function CommentInput({
   id,
   onRefresh,
@@ -396,40 +370,30 @@ function CommentInput({
   const [guestWebsite, setGuestWebsite] = useState("");
   const [error, setError] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
-  const [captchaReady, setCaptchaReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { showAlert, AlertUI } = useAlert();
   const profile = useContext(ProfileContext);
   const [, setLocation] = useLocation();
   const config = useContext(ClientConfigContext);
-
   const rawGuest = config.get('comment.guest.enabled');
   const guestEnabled = rawGuest !== false && rawGuest !== 'false';
-
   const isAdmin = Boolean(profile?.permission);
   const requiresCaptcha = !isAdmin && (Boolean(profile) || guestEnabled);
-
   const captchaContainerRef = useRef<HTMLDivElement>(null);
   const captchaWidgetIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!requiresCaptcha) {
-      setCaptchaReady(true);
       return;
     }
-
     let disposed = false;
     let intervalId: ReturnType<typeof setInterval> | undefined;
-
     const renderCaptcha = () => {
       if (disposed || !captchaContainerRef.current || !window.turnstile) {
         return false;
       }
-
       if (captchaWidgetIdRef.current) {
         return true;
       }
-
       try {
         captchaWidgetIdRef.current = window.turnstile.render(
           captchaContainerRef.current,
@@ -450,19 +414,15 @@ function CommentInput({
             },
           }
         );
-
-        setCaptchaReady(true);
         return true;
       } catch {
         setError("人机验证加载失败，请刷新页面后重试");
         return false;
       }
     };
-
     const existingScript = document.querySelector(
       'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
     ) as HTMLScriptElement | null;
-
     if (!existingScript) {
       const script = document.createElement("script");
       script.src = TURNSTILE_SCRIPT_URL;
@@ -478,38 +438,30 @@ function CommentInput({
       };
       document.head.appendChild(script);
     }
-
     intervalId = setInterval(() => {
       if (renderCaptcha() && intervalId) {
         clearInterval(intervalId);
         intervalId = undefined;
       }
     }, 300);
-
     renderCaptcha();
-
     return () => {
       disposed = true;
-
       if (intervalId) {
         clearInterval(intervalId);
       }
-
       if (captchaWidgetIdRef.current && window.turnstile) {
         window.turnstile.remove(captchaWidgetIdRef.current);
         captchaWidgetIdRef.current = null;
       }
     };
   }, [requiresCaptcha]);
-
   function resetCaptcha() {
     setTurnstileToken("");
-
     if (captchaWidgetIdRef.current && window.turnstile) {
       window.turnstile.reset(captchaWidgetIdRef.current);
     }
   }
-
   function errorHumanize(error: string) {
     if (error === "Unauthorized") return t("login.required");
     else if (error === "Content is required") return t("comment.empty");
@@ -518,35 +470,28 @@ function CommentInput({
     else if (error === "Turnstile verification failed") return "人机验证失败，请重新验证";
     return error;
   }
-
   async function submit() {
     if (submitting) {
       return;
     }
-
     if (requiresCaptcha && !turnstileToken) {
       setError("请先完成人机验证");
       return;
     }
-
     if (profile && !content.trim()) {
       setError(t("comment.empty"));
       return;
     }
-
     if (!profile && guestEnabled && !guestName.trim()) {
       setError(t("comment.guest_name_required"));
       return;
     }
-
     if (!profile && !guestEnabled) {
       setLocation('/login');
       return;
     }
-
     setSubmitting(true);
     setError("");
-
     try {
       const requestData = profile
         ? {
@@ -560,33 +505,26 @@ function CommentInput({
             guestWebsite: guestWebsite.trim() || undefined,
             turnstileToken,
           };
-
       const result = await client.comment.create(
         parseInt(id),
         requestData
       );
-
       if (result.error) {
         setError(errorHumanize(result.error.value as string));
         resetCaptcha();
         return;
       }
-
       setContent("");
       setError("");
-
       if (!profile) {
         setGuestName("");
         setGuestEmail("");
         setGuestWebsite("");
       }
-
       resetCaptcha();
-
       const successMessage = isAdmin
         ? "评论发布成功"
         : "评论已提交，等待管理员审核";
-
       showAlert(successMessage, () => {
         onRefresh();
       });
@@ -597,17 +535,14 @@ function CommentInput({
       setSubmitting(false);
     }
   }
-
   const canSubmit =
     !submitting &&
     (!requiresCaptcha || Boolean(turnstileToken));
-
   return (
     <div className="w-full rounded-2xl bg-w t-primary p-6 items-end flex flex-col">
       <div className="flex flex-col w-full items-start mb-4">
         <label htmlFor="comment">{t("comment.title")}</label>
       </div>
-
       {profile ? (
         <>
           <textarea
@@ -617,13 +552,11 @@ function CommentInput({
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-
           {requiresCaptcha && (
             <div className="w-full mt-4">
               <div ref={captchaContainerRef} />
             </div>
           )}
-
           <button
             className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={submit}
@@ -662,13 +595,11 @@ function CommentInput({
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-
           {requiresCaptcha && (
             <div className="w-full mt-4">
               <div ref={captchaContainerRef} />
             </div>
           )}
-
           <button
             className="mt-4 bg-theme text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={submit}
@@ -687,13 +618,11 @@ function CommentInput({
           </button>
         </div>
       )}
-
       {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
       <AlertUI />
     </div>
   );
 }
-
 type Comment = {
   id: number;
   content: string;
@@ -709,14 +638,12 @@ type Comment = {
   guestEmail?: string;
   guestWebsite?: string;
 };
-
 function Comments({ id }: { id: string }) {
   const config = useContext(ClientConfigContext);
   const [comments, setComments] = useState<Comment[]>([]);
   const [error, setError] = useState<string>();
   const ref = useRef("");
   const { t } = useTranslation();
-
   function loadComments() {
     client.comment
       .list(parseInt(id))
@@ -728,19 +655,16 @@ function Comments({ id }: { id: string }) {
         }
       });
   }
-
   useEffect(() => {
     if (ref.current == id) return;
     loadComments();
     ref.current = id;
   }, [id]);
-
   return (
     <>
       {config.getBoolean('comment.enabled') &&
         <div className="m-2 flex flex-col justify-center items-center">
           <CommentInput id={id} onRefresh={loadComments} />
-
           {error && (
             <>
               <div className="flex flex-col wauto rounded-2xl bg-w t-primary m-2 p-6 items-center justify-center">
@@ -754,7 +678,6 @@ function Comments({ id }: { id: string }) {
               </div>
             </>
           )}
-
           {comments.length > 0 && (
             <div className="w-full">
               {comments.map((comment) => (
@@ -771,7 +694,6 @@ function Comments({ id }: { id: string }) {
     </>
   );
 }
-
 function CommentItem({
   comment,
   onRefresh,
@@ -785,7 +707,6 @@ function CommentItem({
   const profile = useContext(ProfileContext);
   const commenterName = comment.user?.username || comment.guestName || t("anonymous");
   const commenterAvatar = comment.user?.avatar || "/avatar.png";
-
   function deleteComment() {
     showConfirm(
       t("delete.comment.title"),
@@ -804,7 +725,6 @@ function CommentItem({
           });
       })
   }
-
   return (
     <div className="flex flex-row items-start rounded-xl mt-2">
       <ImageWithFallback
@@ -812,13 +732,11 @@ function CommentItem({
         alt={commenterName}
         className="mt-4 h-8 w-8 rounded-full"
       />
-
       <div className="flex flex-col flex-1 w-0 ml-2 bg-w rounded-xl p-4">
         <div className="flex min-w-0 flex-row items-center gap-2">
           <span className="min-w-0 truncate text-base font-bold t-primary">
             {commenterName}
           </span>
-
           {comment.guestWebsite && (
             <a
               href={comment.guestWebsite}
@@ -829,9 +747,7 @@ function CommentItem({
               <i className="ri-external-link-line"></i>
             </a>
           )}
-
           <div className="flex-1 w-0" />
-
           <span
             title={new Date(comment.createdAt).toLocaleString()}
             className="shrink-0 text-sm text-gray-400"
@@ -839,9 +755,7 @@ function CommentItem({
             {timeago(comment.createdAt)}
           </span>
         </div>
-
         <p className="break-words t-primary [overflow-wrap:anywhere]">{comment.content}</p>
-
         <div className="flex flex-row justify-end">
           {(profile?.permission || (comment.user && profile?.id == comment.user.id)) && (
             <Popup
@@ -866,7 +780,6 @@ function CommentItem({
           )}
         </div>
       </div>
-
       <ConfirmUI />
       <AlertUI />
     </div>
