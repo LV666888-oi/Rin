@@ -1,437 +1,466 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { CommentService } from ‘../comments’;
-import { Hono } from “hono”;
-import type { Variables } from “../../core/hono-types”;
-import { setupTestApp, cleanupTestDB } from ‘../../../tests/fixtures’;
-import type { Database } from ‘bun:sqlite’;
+import { CommentService } from "../comments";
+import { Hono } from "hono";
+import type { Variables } from "../../core/hono-types";
+import { setupTestApp, cleanupTestDB } from "../../../tests/fixtures";
+import type { Database } from "bun:sqlite";
 
-describe(‘CommentService’, () => {
-let db: any;
-let sqlite: Database;
-let env: Env;
-let app: Hono<{ Bindings: Env; Variables: Variables }>;
-let clientConfig: any;
-const originalFetch = globalThis.fetch;
+describe("CommentService", () => {
+    let db: any;
+    let sqlite: Database;
+    let env: Env;
+    let app: Hono<{ Bindings: Env; Variables: Variables }>;
+    let clientConfig: any;
+    const originalFetch = globalThis.fetch;
 
-beforeEach(async () => {
-    const ctx = await setupTestApp(CommentService);
-    db = ctx.db;
-    sqlite = ctx.sqlite;
-    env = ctx.env;
-    app = ctx.app;
-    clientConfig = ctx.clientConfig;
-    await seedTestData(sqlite);
-    env.TURNSTILE_SECRET_KEY = 'test-turnstile-secret' as any;
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
-        if (String(input).includes('challenges.cloudflare.com/turnstile/v0/siteverify')) {
-            return Response.json({
-                success: true,
-                action: 'comment',
-            });
-        }
-        return new Response('OK');
-    }) as typeof fetch;
-});
-afterEach(() => {
-    globalThis.fetch = originalFetch;
-    cleanupTestDB(sqlite);
-});
-async function seedTestData(sqlite: Database) {
-    sqlite.exec(`
-        INSERT INTO users (id, username, avatar, permission, openid) VALUES
-            (1, 'user1', 'avatar1.png', 0, 'gh_1'),
-            (2, 'user2', 'avatar2.png', 0, 'gh_2'),
-            (3, 'admin', 'admin.png', 1, 'gh_admin')
-    `);
-    sqlite.exec(`
-        INSERT INTO feeds (id, title, content, uid, draft, listed) VALUES
-            (1, 'Feed 1', 'Content 1', 1, 0, 1),
-            (2, 'Feed 2', 'Content 2', 1, 0, 1)
-    `);
-    sqlite.exec(`
-        INSERT INTO comments (id, feed_id, user_id, content, created_at) VALUES
-            (1, 1, 2, 'Comment 1 on feed 1', unixepoch()),
-            (2, 1, 2, 'Comment 2 on feed 1', unixepoch()),
-            (3, 2, 1, 'Comment on feed 2', unixepoch())
-    `);
-}
-describe('GET /:feed - privacy and approval filtering', () => {
-    it('should never expose guest emails in the public comment list', async () => {
-        sqlite.exec(`
-            INSERT INTO comments (id, feed_id, user_id, content, guest_name, guest_email, guest_website, approved)
-            VALUES (10, 1, NULL, 'Guest comment', 'Visitor', 'visitor@example.com', 'https://visitor.example', 1)
-        `);
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any[];
-        const guest = data.find((item) => item.guestName === 'Visitor');
-        expect(guest).toBeDefined();
-        expect(guest).not.toHaveProperty('guestEmail');
-        expect(JSON.stringify(data)).not.toContain('visitor@example.com');
-        expect(guest.guestWebsite).toBe('https://visitor.example');
-    });
-    it('should hide unapproved comments from the public list', async () => {
-        sqlite.exec(`
-            INSERT INTO comments (id, feed_id, user_id, content, guest_name, approved)
-            VALUES (11, 1, NULL, 'Pending guest comment', 'Pending', 0)
-        `);
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any[];
-        expect(data.some((item) => item.content === 'Pending guest comment')).toBe(false);
-        expect(data.every((item) => item.approved === 1)).toBe(true);
-    });
-    it('should keep guest comments pending until approved', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Pending approval',
-                guestName: 'Visitor2',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE guest_name = 'Visitor2'`
-        ).get() as any;
-        expect(row?.approved).toBe(0);
-        const listRes = await app.request('/1', { method: 'GET' }, env);
-        const data = await listRes.json() as any[];
-        const created = data.find((item) => item.content === 'Pending approval');
-        expect(created).toBeUndefined();
-    });
-});
-describe('GET /:feed - List comments', () => {
-    it('should return comments for a feed', async () => {
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any;
-        expect(data).toBeArray();
-        expect(data.length).toBe(2);
-        expect(data[0]).toHaveProperty('content');
-        expect(data[0]).toHaveProperty('user');
-        expect(data[0].user).toHaveProperty('username');
-    });
-    it('should return empty array when feed has no comments', async () => {
-        sqlite.exec(`INSERT INTO feeds (id, title, content, uid) VALUES (3, 'No Comments', 'Content', 1)`);
-        const res = await app.request('/3', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any;
-        expect(data).toEqual([]);
-    });
-    it('should not expose sensitive fields', async () => {
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any;
-        expect(data.length).toBeGreaterThan(0);
-        expect(data[0]).not.toHaveProperty('feedId');
-        expect(data[0]).not.toHaveProperty('userId');
-        expect(data[0].user).toHaveProperty('id');
-        expect(data[0].user).toHaveProperty('username');
-        expect(data[0].user).toHaveProperty('avatar');
-        expect(data[0].user).toHaveProperty('permission');
-    });
-    it('should order comments by createdAt descending', async () => {
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any;
-        expect(data.length).toBe(2);
-    });
-});
-describe('POST /:feed - Create comment', () => {
-    it('should create comment with authenticated user', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                content: 'New test comment',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE content = 'New test comment'`
-        ).get() as any;
-        expect(row?.approved).toBe(0);
-        const listRes = await app.request('/1', { method: 'GET' }, env);
-        const data = await listRes.json() as any[];
-        expect(data.some((item) => item.content === 'New test comment')).toBe(false);
-    });
-    it('should create guest comment with guestName', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Guest comment',
-                guestName: 'Visitor',
-                guestEmail: 'visitor@example.com',
-                guestWebsite: 'https://example.com',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT content, guest_name, guest_email, guest_website, approved FROM comments WHERE guest_name = 'Visitor'`
-        ).get() as any;
-        expect(row).toBeDefined();
-        expect(row.content).toBe('Guest comment');
-        expect(row.guest_name).toBe('Visitor');
-        expect(row.guest_email).toBe('visitor@example.com');
-        expect(row.guest_website).toBe('https://example.com');
-        expect(row.approved).toBe(0);
-    });
-    it('should reject guest comment without guestName', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Guest no name',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(400);
-    });
-    it('should hide pending guest comments from the public list', async () => {
-        const createRes = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Hi from guest',
-                guestName: 'Guest',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(createRes.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE guest_name = 'Guest'`
-        ).get() as any;
-        expect(row?.approved).toBe(0);
-        const res = await app.request('/1', { method: 'GET' }, env);
-        expect(res.status).toBe(200);
-        const data = await res.json() as any[];
-        const guestComment = data.find((c: any) => c.guestName === 'Guest');
-        expect(guestComment).toBeUndefined();
-    });
-    it('should require approval for authenticated user comments', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                content: 'User pending comment',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE content = 'User pending comment'`
-        ).get() as any;
-        expect(row?.approved).toBe(0);
-    });
-    it('should publish admin comments immediately', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_3',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ content: 'Admin public comment' }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE content = 'Admin public comment'`
-        ).get() as any;
-        expect(row?.approved).toBe(1);
-    });
-    it('should return 400 when not authenticated and guest name missing', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Test comment',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(400);
-        expect(await res.text()).toContain('Guest name is required');
-    });
-    it('should require content', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ content: '' }),
-        }, env);
-        expect(res.status).toBe(400);
-    });
-    it('should return 401 for non-existent user token', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_999',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                content: 'Test',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(400);
-    });
-    it('should return 400 for non-existent feed', async () => {
-        const res = await app.request('/999', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ content: 'Test' }),
-        }, env);
-        expect(res.status).toBe(400);
-    });
-    it('should still create comment when webhook delivery fails', async () => {
-        env.WEBHOOK_URL = 'not-a-valid-url' as any;
+    beforeEach(async () => {
+        const ctx = await setupTestApp(CommentService);
+        db = ctx.db;
+        sqlite = ctx.sqlite;
+        env = ctx.env;
+        app = ctx.app;
+        clientConfig = ctx.clientConfig;
+        await seedTestData(sqlite);
+        env.TURNSTILE_SECRET_KEY = "test-turnstile-secret" as any;
         globalThis.fetch = mock(async (input: RequestInfo | URL) => {
-            if (String(input).includes('challenges.cloudflare.com/turnstile/v0/siteverify')) {
+            if (String(input).includes("challenges.cloudflare.com/turnstile/v0/siteverify")) {
                 return Response.json({
                     success: true,
-                    action: 'comment',
+                    action: "comment",
                 });
             }
-            throw new TypeError('Invalid URL');
+            return new Response("OK");
         }) as typeof fetch;
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                content: 'Comment survives webhook errors',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT approved FROM comments WHERE content = 'Comment survives webhook errors'`
-        ).get() as any;
-        expect(row?.approved).toBe(0);
     });
-});
-describe('POST /:feed - Comments turned off', () => {
-    beforeEach(async () => {
-        await clientConfig.set('comment.enabled', false);
-    });
-    it('should reject guest comments and send no notification', async () => {
-        env.WEBHOOK_URL = 'https://example.com/webhook' as any;
-        const fetchMock = mock(async () => new Response('OK'));
-        globalThis.fetch = fetchMock as unknown as typeof fetch;
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: 'Spam', guestName: 'Bot' }),
-        }, env);
-        expect(res.status).toBe(403);
-        const row = sqlite.prepare(
-            `SELECT id FROM comments WHERE guest_name = 'Bot'`
-        ).get();
-        expect(row).toBeNull();
-        expect(fetchMock).not.toHaveBeenCalled();
-    });
-    it('should reject comments from signed-in users', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_1',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ content: 'Should not be stored' }),
-        }, env);
-        expect(res.status).toBe(403);
-        const comments = sqlite.prepare(
-            `SELECT * FROM comments WHERE feed_id = 1`
-        ).all();
-        expect(comments.length).toBe(2);
-    });
-    it('should still let an admin comment', async () => {
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer mock_token_3',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ content: 'Admin note' }),
-        }, env);
-        expect(res.status).toBe(200);
-        const comments = sqlite.prepare(
-            `SELECT * FROM comments WHERE feed_id = 1`
-        ).all();
-        expect(comments.length).toBe(3);
-    });
-    it('should accept comments again once they are turned back on', async () => {
-        await clientConfig.set('comment.enabled', true);
-        const res = await app.request('/1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: 'Welcome back',
-                guestName: 'Visitor',
-                turnstileToken: 'test-comment-token',
-            }),
-        }, env);
-        expect(res.status).toBe(200);
-        const row = sqlite.prepare(
-            `SELECT content, approved FROM comments WHERE guest_name = 'Visitor'`
-        ).get() as any;
-        expect(row?.content).toBe('Welcome back');
-        expect(row?.approved).toBe(0);
-    });
-});
-describe('DELETE /:id - Delete comment', () => {
-    it('should allow user to delete their own comment', async () => {
-        const res = await app.request('/1', {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer mock_token_2' },
-        }, env);
-        expect(res.status).toBe(200);
-        const dbResult = sqlite.prepare(
-            `SELECT * FROM comments WHERE id = 1`
-        ).all();
-        expect(dbResult.length).toBe(0);
-    });
-    it('should allow admin to delete any comment', async () => {
-        const res = await app.request('/1', {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer mock_token_3' },
-        }, env);
-        expect(res.status).toBe(200);
-    });
-    it('should deny deletion by other users', async () => {
-        const res = await app.request('/1', {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer mock_token_1' },
-        }, env);
-        expect(res.status).toBe(403);
-    });
-    it('should require authentication', async () => {
-        const res = await app.request('/1', { method: 'DELETE' }, env);
-        expect(res.status).toBe(401);
-    });
-    it('should return 404 for non-existent comment', async () => {
-        const res = await app.request('/999', {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer mock_token_1' },
-        }, env);
-        expect(res.status).toBe(404);
-    });
-});
 
+    afterEach(() => {
+        globalThis.fetch = originalFetch;
+        cleanupTestDB(sqlite);
+    });
+
+    async function seedTestData(sqlite: Database) {
+        sqlite.exec(`
+            INSERT INTO users (id, username, avatar, permission, openid) VALUES
+                (1, 'user1', 'avatar1.png', 0, 'gh_1'),
+                (2, 'user2', 'avatar2.png', 0, 'gh_2'),
+                (3, 'admin', 'admin.png', 1, 'gh_admin')
+        `);
+        sqlite.exec(`
+            INSERT INTO feeds (id, title, content, uid, draft, listed) VALUES
+                (1, 'Feed 1', 'Content 1', 1, 0, 1),
+                (2, 'Feed 2', 'Content 2', 1, 0, 1)
+        `);
+        sqlite.exec(`
+            INSERT INTO comments (id, feed_id, user_id, content, created_at) VALUES
+                (1, 1, 2, 'Comment 1 on feed 1', unixepoch()),
+                (2, 1, 2, 'Comment 2 on feed 1', unixepoch()),
+                (3, 2, 1, 'Comment on feed 2', unixepoch())
+        `);
+    }
+
+    describe("GET /:feed - privacy and approval filtering", () => {
+        it("should never expose guest emails in the public comment list", async () => {
+            sqlite.exec(`
+                INSERT INTO comments (id, feed_id, user_id, content, guest_name, guest_email, guest_website, approved)
+                VALUES (10, 1, NULL, 'Guest comment', 'Visitor', 'visitor@example.com', 'https://visitor.example', 1)
+            `);
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any[];
+            const guest = data.find((item) => item.guestName === "Visitor");
+            expect(guest).toBeDefined();
+            expect(guest).not.toHaveProperty("guestEmail");
+            expect(JSON.stringify(data)).not.toContain("visitor@example.com");
+            expect(guest.guestWebsite).toBe("https://visitor.example");
+        });
+
+        it("should hide unapproved comments from the public list", async () => {
+            sqlite.exec(`
+                INSERT INTO comments (id, feed_id, user_id, content, guest_name, approved)
+                VALUES (11, 1, NULL, 'Pending guest comment', 'Pending', 0)
+            `);
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any[];
+            expect(data.some((item) => item.content === "Pending guest comment")).toBe(false);
+            expect(data.every((item) => item.approved === 1)).toBe(true);
+        });
+
+        it("should keep guest comments pending until approved", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Pending approval",
+                    guestName: "Visitor2",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE guest_name = 'Visitor2'"
+            ).get() as any;
+            expect(row?.approved).toBe(0);
+            const listRes = await app.request("/1", { method: "GET" }, env);
+            const data = await listRes.json() as any[];
+            const created = data.find((item) => item.content === "Pending approval");
+            expect(created).toBeUndefined();
+        });
+    });
+
+    describe("GET /:feed - List comments", () => {
+        it("should return comments for a feed", async () => {
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data).toBeArray();
+            expect(data.length).toBe(2);
+            expect(data[0]).toHaveProperty("content");
+            expect(data[0]).toHaveProperty("user");
+            expect(data[0].user).toHaveProperty("username");
+        });
+
+        it("should return empty array when feed has no comments", async () => {
+            sqlite.exec("INSERT INTO feeds (id, title, content, uid) VALUES (3, 'No Comments', 'Content', 1)");
+            const res = await app.request("/3", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data).toEqual([]);
+        });
+
+        it("should not expose sensitive fields", async () => {
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data.length).toBeGreaterThan(0);
+            expect(data[0]).not.toHaveProperty("feedId");
+            expect(data[0]).not.toHaveProperty("userId");
+            expect(data[0].user).toHaveProperty("id");
+            expect(data[0].user).toHaveProperty("username");
+            expect(data[0].user).toHaveProperty("avatar");
+            expect(data[0].user).toHaveProperty("permission");
+        });
+
+        it("should order comments by createdAt descending", async () => {
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data.length).toBe(2);
+        });
+    });
+
+    describe("POST /:feed - Create comment", () => {
+        it("should create comment with authenticated user", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    content: "New test comment",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE content = 'New test comment'"
+            ).get() as any;
+            expect(row?.approved).toBe(0);
+            const listRes = await app.request("/1", { method: "GET" }, env);
+            const data = await listRes.json() as any[];
+            expect(data.some((item) => item.content === "New test comment")).toBe(false);
+        });
+
+        it("should create guest comment with guestName", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Guest comment",
+                    guestName: "Visitor",
+                    guestEmail: "visitor@example.com",
+                    guestWebsite: "https://example.com",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT content, guest_name, guest_email, guest_website, approved FROM comments WHERE guest_name = 'Visitor'"
+            ).get() as any;
+            expect(row).toBeDefined();
+            expect(row.content).toBe("Guest comment");
+            expect(row.guest_name).toBe("Visitor");
+            expect(row.guest_email).toBe("visitor@example.com");
+            expect(row.guest_website).toBe("https://example.com");
+            expect(row.approved).toBe(0);
+        });
+
+        it("should reject guest comment without guestName", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Guest no name",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(400);
+        });
+
+        it("should hide pending guest comments from the public list", async () => {
+            const createRes = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Hi from guest",
+                    guestName: "Guest",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(createRes.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE guest_name = 'Guest'"
+            ).get() as any;
+            expect(row?.approved).toBe(0);
+            const res = await app.request("/1", { method: "GET" }, env);
+            expect(res.status).toBe(200);
+            const data = await res.json() as any[];
+            const guestComment = data.find((c: any) => c.guestName === "Guest");
+            expect(guestComment).toBeUndefined();
+        });
+
+        it("should require approval for authenticated user comments", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    content: "User pending comment",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE content = 'User pending comment'"
+            ).get() as any;
+            expect(row?.approved).toBe(0);
+        });
+
+        it("should publish admin comments immediately", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_3",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ content: "Admin public comment" }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE content = 'Admin public comment'"
+            ).get() as any;
+            expect(row?.approved).toBe(1);
+        });
+
+        it("should return 400 when not authenticated and guest name missing", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Test comment",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain("Guest name is required");
+        });
+
+        it("should require content", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ content: "" }),
+            }, env);
+            expect(res.status).toBe(400);
+        });
+
+        it("should return 401 for non-existent user token", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_999",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    content: "Test",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(400);
+        });
+
+        it("should return 400 for non-existent feed", async () => {
+            const res = await app.request("/999", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ content: "Test" }),
+            }, env);
+            expect(res.status).toBe(400);
+        });
+
+        it("should still create comment when webhook delivery fails", async () => {
+            env.WEBHOOK_URL = "not-a-valid-url" as any;
+            globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+                if (String(input).includes("challenges.cloudflare.com/turnstile/v0/siteverify")) {
+                    return Response.json({
+                        success: true,
+                        action: "comment",
+                    });
+                }
+                throw new TypeError("Invalid URL");
+            }) as typeof fetch;
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    content: "Comment survives webhook errors",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT approved FROM comments WHERE content = 'Comment survives webhook errors'"
+            ).get() as any;
+            expect(row?.approved).toBe(0);
+        });
+    });
+
+    describe("POST /:feed - Comments turned off", () => {
+        beforeEach(async () => {
+            await clientConfig.set("comment.enabled", false);
+        });
+
+        it("should reject guest comments and send no notification", async () => {
+            env.WEBHOOK_URL = "https://example.com/webhook" as any;
+            const fetchMock = mock(async () => new Response("OK"));
+            globalThis.fetch = fetchMock as unknown as typeof fetch;
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: "Spam", guestName: "Bot" }),
+            }, env);
+            expect(res.status).toBe(403);
+            const row = sqlite.prepare(
+                "SELECT id FROM comments WHERE guest_name = 'Bot'"
+            ).get();
+            expect(row).toBeNull();
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
+
+        it("should reject comments from signed-in users", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_1",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ content: "Should not be stored" }),
+            }, env);
+            expect(res.status).toBe(403);
+            const comments = sqlite.prepare(
+                "SELECT * FROM comments WHERE feed_id = 1"
+            ).all();
+            expect(comments.length).toBe(2);
+        });
+
+        it("should still let an admin comment", async () => {
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer mock_token_3",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ content: "Admin note" }),
+            }, env);
+            expect(res.status).toBe(200);
+            const comments = sqlite.prepare(
+                "SELECT * FROM comments WHERE feed_id = 1"
+            ).all();
+            expect(comments.length).toBe(3);
+        });
+
+        it("should accept comments again once they are turned back on", async () => {
+            await clientConfig.set("comment.enabled", true);
+            const res = await app.request("/1", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "Welcome back",
+                    guestName: "Visitor",
+                    turnstileToken: "test-comment-token",
+                }),
+            }, env);
+            expect(res.status).toBe(200);
+            const row = sqlite.prepare(
+                "SELECT content, approved FROM comments WHERE guest_name = 'Visitor'"
+            ).get() as any;
+            expect(row?.content).toBe("Welcome back");
+            expect(row?.approved).toBe(0);
+        });
+    });
+
+    describe("DELETE /:id - Delete comment", () => {
+        it("should allow user to delete their own comment", async () => {
+            const res = await app.request("/1", {
+                method: "DELETE",
+                headers: { "Authorization": "Bearer mock_token_2" },
+            }, env);
+            expect(res.status).toBe(200);
+            const dbResult = sqlite.prepare(
+                "SELECT * FROM comments WHERE id = 1"
+            ).all();
+            expect(dbResult.length).toBe(0);
+        });
+
+        it("should allow admin to delete any comment", async () => {
+            const res = await app.request("/1", {
+                method: "DELETE",
+                headers: { "Authorization": "Bearer mock_token_3" },
+            }, env);
+            expect(res.status).toBe(200);
+        });
+
+        it("should deny deletion by other users", async () => {
+            const res = await app.request("/1", {
+                method: "DELETE",
+                headers: { "Authorization": "Bearer mock_token_1" },
+            }, env);
+            expect(res.status).toBe(403);
+        });
+
+        it("should require authentication", async () => {
+            const res = await app.request("/1", { method: "DELETE" }, env);
+            expect(res.status).toBe(401);
+        });
+
+        it("should return 404 for non-existent comment", async () => {
+            const res = await app.request("/999", {
+                method: "DELETE",
+                headers: { "Authorization": "Bearer mock_token_1" },
+            }, env);
+            expect(res.status).toBe(404);
+        });
+    });
 });
