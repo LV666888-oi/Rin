@@ -1,5 +1,5 @@
 import { Modal } from "@rin/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, ButtonWithLoading } from "./button";
 
@@ -11,33 +11,59 @@ export type Confirm = {
 
 export type Alert = {
     message: string;
-    onConfirm: () => void;
+    onConfirm: () => Promise<void> | void;
 }
 
-export type ShowAlertType = (msg: string, onConfirm?: () => (Promise<void> | void)) => void;
+export type ShowAlertType = (
+    msg: string,
+    onConfirm?: () => Promise<void> | void
+) => void;
 
 export function useAlert() {
-    const [alert, setAlert] = useState<Alert | null>(null)
-    const [isOpen, setIsOpen] = useState(false)
-    const close = () => {
-        alert?.onConfirm()
-        setIsOpen(false)
-        setAlert(null)
-    }
-    const showAlert = (alert: string, onConfirm?: () => void) => {
+    const [alert, setAlert] = useState<Alert | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
+    const closingRef = useRef(false);
+
+    const close = async () => {
+        if (closingRef.current) return;
+
+        closingRef.current = true;
+
+        const currentAlert = alert;
+
+        setIsOpen(false);
+        setAlert(null);
+
+        try {
+            await currentAlert?.onConfirm();
+        } catch (error) {
+            console.error("Alert callback failed:", error);
+        } finally {
+            closingRef.current = false;
+        }
+    };
+
+    const showAlert: ShowAlertType = (message, onConfirm) => {
+        closingRef.current = false;
+
         setAlert({
-            message: alert,
+            message,
             onConfirm: onConfirm ?? (() => { })
-        })
-        setIsOpen(true)
-    }
-    const { t } = useTranslation()
+        });
+
+        setIsOpen(true);
+    };
+
+    const { t } = useTranslation();
+
     const AlertUI = () => (
         <Modal
             isOpen={isOpen}
             shouldCloseOnOverlayClick={true}
             shouldCloseOnEsc={true}
-            onRequestClose={close}
+            onRequestClose={() => {
+                void close();
+            }}
             contentLabel={t("alert")}
             size="sm"
             panelClassName="p-6"
@@ -50,36 +76,53 @@ export function useAlert() {
                     {alert?.message}
                 </p>
                 <div className="w-full flex flex-row items-center justify-center space-x-2 mt-4">
-                    <Button onClick={close} title={t('confirm')} />
+                    <Button
+                        onClick={() => {
+                            void close();
+                        }}
+                        title={t("confirm")}
+                    />
                 </div>
             </div>
         </Modal>
-    )
-    return { showAlert, close, AlertUI }
+    );
+
+    return { showAlert, close, AlertUI };
 }
 
 export function useConfirm() {
-    const [confirm, setConfirm] = useState<Confirm | null>(null)
-    const [isOpen, setIsOpen] = useState(false)
+    const [confirm, setConfirm] = useState<Confirm | null>(null);
+    const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+
     const close = () => {
-        setConfirm(null)
-        setIsOpen(false)
-    }
-    const showConfirm = (title: string, message: string, onConfirm?: () => Promise<void> | void) => {
+        if (loading) return;
+
+        setConfirm(null);
+        setIsOpen(false);
+    };
+
+    const showConfirm = (
+        title: string,
+        message: string,
+        onConfirm?: () => Promise<void> | void
+    ) => {
         setConfirm({
             title,
             message,
             onConfirm: onConfirm ?? (() => { })
-        })
-        setIsOpen(true)
-    }
-    const { t } = useTranslation()
+        });
+
+        setIsOpen(true);
+    };
+
+    const { t } = useTranslation();
+
     const ConfirmUI = () => (
         <Modal
             isOpen={isOpen}
-            shouldCloseOnOverlayClick={true}
-            shouldCloseOnEsc={true}
+            shouldCloseOnOverlayClick={!loading}
+            shouldCloseOnEsc={!loading}
             onRequestClose={close}
             contentLabel={confirm?.title ?? t("confirm")}
             size="sm"
@@ -96,16 +139,31 @@ export function useConfirm() {
                     <ButtonWithLoading
                         loading={loading}
                         onClick={async () => {
+                            if (loading) return;
+
                             setLoading(true);
-                            await confirm?.onConfirm();
-                            setLoading(false);
-                            setIsOpen(false);
+
+                            try {
+                                await confirm?.onConfirm();
+                                setIsOpen(false);
+                                setConfirm(null);
+                            } catch (error) {
+                                console.error("Confirm callback failed:", error);
+                            } finally {
+                                setLoading(false);
+                            }
                         }}
-                        title={t('confirm')} />
-                    <Button secondary onClick={close} title={t('cancel')} />
+                        title={t("confirm")}
+                    />
+                    <Button
+                        secondary
+                        onClick={close}
+                        title={t("cancel")}
+                    />
                 </div>
             </div>
         </Modal>
-    )
-    return { showConfirm, close, ConfirmUI }
+    );
+
+    return { showConfirm, close, ConfirmUI };
 }
