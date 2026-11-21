@@ -1,12 +1,11 @@
 import { Hono } from "hono";
 import type { AppContext } from "../core/hono-types";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { comments, feeds, users } from "../db/schema";
 import { profileAsync } from "../core/server-timing";
 import { notify } from "../utils/webhook";
 import { resolveWebhookConfig } from "./config-helpers";
 
-// 验证 Cloudflare Turnstile
 async function verifyCommentTurnstile(
     secret: string,
     token: string,
@@ -50,7 +49,7 @@ async function verifyCommentTurnstile(
 export function CommentService(): Hono {
     const app = new Hono();
 
-    // 管理员：获取所有待审核评论
+    // Admin: Get all pending comments
     app.get('/admin/pending', async (c: AppContext) => {
         if (!c.get('admin')) {
             return c.text('Forbidden', 403);
@@ -60,9 +59,6 @@ export function CommentService(): Hono {
 
         const pendingComments = await db.query.comments.findMany({
             where: eq(comments.approved, 0),
-            columns: {
-                guestEmail: false,
-            },
             with: {
                 feed: {
                     columns: {
@@ -85,7 +81,7 @@ export function CommentService(): Hono {
         return c.json(pendingComments);
     });
 
-    // 管理员：批准评论
+    // Admin: Approve a comment
     app.post('/admin/:id/approve', async (c: AppContext) => {
         if (!c.get('admin')) {
             return c.text('Forbidden', 403);
@@ -116,10 +112,11 @@ export function CommentService(): Hono {
         return c.json({ success: true });
     });
 
-    // 公共：获取已审核通过的评论
+    // Public: Get approved comments
     app.get('/:feed', async (c: AppContext) => {
         const db = c.get('db');
         const feedId = parseInt(c.req.param('feed'));
+        const isAdmin = Boolean(c.get('admin'));
 
         const comment_list = await profileAsync(c, 'comment_list_db', () =>
             db.query.comments.findMany({
@@ -130,7 +127,7 @@ export function CommentService(): Hono {
                 columns: {
                     feedId: false,
                     userId: false,
-                    guestEmail: false,
+                    guestEmail: isAdmin,
                 },
                 with: {
                     user: {
@@ -146,12 +143,12 @@ export function CommentService(): Hono {
             })
         );
 
-        const result = comment_list.map((c: any) => {
-            if (c.user) {
-                return c;
+        const result = comment_list.map((comment: any) => {
+            if (comment.user) {
+                return comment;
             }
 
-            const { user, ...rest } = c;
+            const { user, ...rest } = comment;
 
             return {
                 ...rest,
@@ -164,7 +161,7 @@ export function CommentService(): Hono {
         return c.json(result);
     });
 
-    // 创建评论
+    // Create a comment
     app.post('/:feed', async (c: AppContext) => {
         const db = c.get('db');
         const env = c.get('env');
@@ -209,7 +206,7 @@ export function CommentService(): Hono {
             return c.text('Feed not found', 400);
         }
 
-        // 非管理员必须通过 Turnstile 验证
+        // Non-admin users must pass Turnstile verification
         if (!admin) {
             if (
                 !turnstileToken ||
@@ -238,7 +235,7 @@ export function CommentService(): Hono {
             }
         }
 
-        // 登录用户评论
+        // Logged-in user comment
         if (uid) {
             const user = await profileAsync(c, 'comment_create_user', () =>
                 db.query.users.findFirst({
@@ -250,7 +247,6 @@ export function CommentService(): Hono {
                 return c.text('User not found', 400);
             }
 
-            // 普通用户待审核，管理员直接公开
             await db.insert(comments).values({
                 feedId,
                 userId: uid,
@@ -258,7 +254,6 @@ export function CommentService(): Hono {
                 approved: admin ? 1 : 0,
             });
 
-            // 只有管理员直接公开的评论才发送公开评论通知
             if (admin) {
                 const {
                     webhookUrl,
@@ -300,7 +295,7 @@ export function CommentService(): Hono {
             return c.text('OK');
         }
 
-        // 游客评论：必须等待管理员审核
+        // Guest comment: requires administrator approval
         if (!guestName || typeof guestName !== 'string' || !guestName.trim()) {
             return c.text('Guest name is required', 400);
         }
@@ -318,7 +313,7 @@ export function CommentService(): Hono {
         return c.text('OK');
     });
 
-    // 删除评论：管理员可删除任何评论，普通用户只能删除自己的评论
+    // Delete comment
     app.delete('/:id', async (c: AppContext) => {
         const db = c.get('db');
         const uid = c.get('uid');
