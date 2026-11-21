@@ -69,17 +69,33 @@ describe("buildWranglerQueueConfig", () => {
 });
 
 describe("buildWranglerObservabilityConfig", () => {
-  it("enables invocation logs and disables traces for preview deploys", () => {
+  it("enables persistent invocation logs and disables traces for preview deploys", () => {
     const config = buildWranglerObservabilityConfig(true);
-    expect(config).toContain("[observability]");
+
     expect(config).toContain("[observability.logs]");
     expect(config).toContain("enabled = true");
+    expect(config).toContain("head_sampling_rate = 1");
     expect(config).toContain("invocation_logs = true");
+    expect(config).toContain("persist = true");
+
     expect(config).toContain("[observability.traces]");
     expect(config).toContain("enabled = false");
+
+    expect(config).toContain("[observability.issue_detection]");
   });
 
-  it("omits observability overrides for production deploys", () => {
-    expect(buildWranglerObservabilityConfig(false)).toBe("");
+  it("enables persistent invocation logs and disables traces for production deploys", () => {
+    const config = buildWranglerObservabilityConfig(false);
+
+    expect(config).toContain("[observability.logs]");
+    expect(config).toContain("enabled = true");
+    expect(config).toContain("head_sampling_rate = 1");
+    expect(config).toContain("invocation_logs = true");
+    expect(config).toContain("persist = true");
+
+    expect(config).toContain("[observability.traces]");
+    expect(config).toContain("enabled = false");
+
+    expect(config).toContain("[observability.issue_detection]");
   });
 });
