@@ -50,7 +50,7 @@ export function LoginPage() {
     const turnstileRef = useRef<HTMLDivElement>(null);
     const widgetIdRef = useRef<string | null>(null);
 
-    // 登录失败后清除旧 Token 并重置人机验证
+    // Login failure: clear the old token and reset Turnstile.
     const resetTurnstile = () => {
         setTurnstileToken("");
 
@@ -63,7 +63,7 @@ export function LoginPage() {
         }
     };
 
-    // 获取登录方式
+    // Get available login methods.
     useEffect(() => {
         client.auth.status().then(({ data }) => {
             if (data) {
@@ -72,7 +72,7 @@ export function LoginPage() {
         });
     }, []);
 
-    // 加载并渲染 Cloudflare Turnstile
+    // Load and render Cloudflare Turnstile.
     useEffect(() => {
         let cancelled = false;
         let widgetRendered = false;
@@ -127,20 +127,21 @@ export function LoginPage() {
                     timeoutTimer = null;
                 }
             } catch (err) {
+                console.error("Turnstile render failed:", err);
                 setError("人机验证加载失败，请刷新页面重试");
             }
         };
 
-        // 如果 Turnstile 已经加载，直接渲染
+        // Render immediately if Turnstile is already loaded.
         if (window.turnstile) {
             renderWidget();
         } else {
-            // 查找已经存在的 Cloudflare 脚本
+            // Find an existing Cloudflare script.
             script = document.querySelector<HTMLScriptElement>(
                 'script[src*="challenges.cloudflare.com/turnstile"]'
             );
 
-            // 如果不存在，则创建并加载
+            // Create and load the script if it does not exist.
             if (!script) {
                 script = document.createElement("script");
 
@@ -153,14 +154,14 @@ export function LoginPage() {
                 document.head.appendChild(script);
             }
 
-            // 持续检查脚本是否加载完成
+            // Check whether the script has finished loading.
             checkTimer = setInterval(() => {
                 if (window.turnstile) {
                     renderWidget();
                 }
             }, 200);
 
-            // 15 秒仍未加载则提示
+            // Show an error if loading takes longer than 15 seconds.
             timeoutTimer = setTimeout(() => {
                 if (!widgetRendered && !cancelled) {
                     setError("人机验证加载超时，请检查网络后刷新页面");
@@ -186,7 +187,7 @@ export function LoginPage() {
         };
     }, []);
 
-    // 登录
+    // Handle login.
     const handleLogin = async () => {
         if (!username || !password) {
             setError(t("login.error.empty"));
@@ -215,7 +216,6 @@ export function LoginPage() {
             }
 
             if (data?.success) {
-                // 保存 Token，用于跨域身份验证
                 if (data.token) {
                     setAuthToken(data.token);
                 }
@@ -244,14 +244,12 @@ export function LoginPage() {
                     {t("login.title")}
                 </p>
 
-                {/* 错误提示 */}
                 {error && (
                     <p className="text-sm text-red-500">
                         {error}
                     </p>
                 )}
 
-                {/* 账号密码登录 */}
                 {authStatus.password && (
                     <>
                         <Input
@@ -271,7 +269,6 @@ export function LoginPage() {
                             disabled={isLoading}
                         />
 
-                        {/* Cloudflare 人机验证 */}
                         <div className="flex justify-center pt-2">
                             <div ref={turnstileRef}></div>
                         </div>
@@ -290,7 +287,6 @@ export function LoginPage() {
                     </>
                 )}
 
-                {/* GitHub 登录 */}
                 {authStatus.github && (
                     <div className="flex flex-col justify-center items-center space-y-2 pt-2">
                         {authStatus.password && (
@@ -318,7 +314,6 @@ export function LoginPage() {
                     </div>
                 )}
 
-                {/* 没有可用的登录方式 */}
                 {!authStatus.github && !authStatus.password && (
                     <p className="text-sm text-red-500">
                         {t("login.no_methods")}
