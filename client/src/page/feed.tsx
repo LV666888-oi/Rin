@@ -421,6 +421,7 @@ export function TOCHeader({ TOC }: { TOC: () => JSX.Element }) {
     </div>
   );
 }
+
 function CommentInput({
   id,
   onRefresh,
@@ -674,14 +675,6 @@ function CommentInput({
     }
   }
 
-  // 必须同时满足以下条件，提交按钮才会启用：
-  // 1. 当前没有正在提交
-  // 2. 已勾选评论协议
-  // 3. 评论内容不为空
-  // 4. 已登录，或者允许游客评论
-  // 5. 游客已经填写昵称
-  // 6. 如果需要人机验证，必须完成验证
-
   const canSubmit =
     !submitting &&
     agreed &&
@@ -692,7 +685,6 @@ function CommentInput({
 
   return (
     <>
-      {/* 评论区右侧留言按钮 */}
       <button
         type="button"
         onClick={() => {
@@ -709,11 +701,11 @@ function CommentInput({
         onRequestClose={closeModal}
         contentLabel="写下你的留言"
         size="lg"
-        panelClassName="rounded-2xl bg-white p-6 text-gray-900 shadow-xl"
+        panelClassName="rounded-2xl bg-w p-6 t-primary shadow-xl"
       >
         <div className="max-h-[80vh] overflow-y-auto">
           <div className="mb-5 flex items-center justify-between gap-4">
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold t-primary">
               写下你的留言
             </h2>
 
@@ -722,20 +714,19 @@ function CommentInput({
               onClick={closeModal}
               aria-label="关闭"
               disabled={submitting}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full t-secondary transition-colors hover:bg-secondary hover:t-primary disabled:opacity-50"
             >
               <i className="ri-close-line text-xl" />
             </button>
           </div>
 
-          {/* 未登录且开启游客评论：显示游客信息输入框 */}
           {!profile && guestEnabled && (
             <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input
                 type="text"
                 aria-label="昵称"
                 placeholder={t("comment.guest_name_placeholder")}
-                className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-3 text-gray-900 outline-none focus:border-gray-400"
+                className="min-w-0 rounded-lg border border-black/10 bg-secondary px-3 py-3 t-primary outline-none placeholder:text-neutral-400 focus:border-theme dark:border-white/10"
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
               />
@@ -745,7 +736,7 @@ function CommentInput({
                   type="email"
                   aria-label="邮箱"
                   placeholder={t("comment.guest_email_placeholder")}
-                  className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-3 text-gray-900 outline-none focus:border-gray-400"
+                  className="min-w-0 flex-1 rounded-lg border border-black/10 bg-secondary px-3 py-3 t-primary outline-none placeholder:text-neutral-400 focus:border-theme dark:border-white/10"
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
                 />
@@ -757,30 +748,29 @@ function CommentInput({
                   onClick={() =>
                     setShowEmailHelp((value) => !value)
                   }
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-gray-100"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 text-sm font-semibold t-secondary transition-colors hover:bg-secondary dark:border-white/10"
                 >
                   ?
                 </button>
               </div>
 
               {showEmailHelp && (
-                <p className="rounded-lg bg-gray-100 p-3 text-sm leading-6 text-gray-600 sm:col-span-2">
+                <p className="rounded-lg bg-secondary p-3 text-sm leading-6 t-secondary sm:col-span-2">
                   填写邮箱后，当你的留言审核状态发生变化时，可以通过邮件接收通知。邮箱仅用于通知，并以加密形式保存，不会公开展示给其他人。
                 </p>
               )}
             </div>
           )}
 
-          {/* 未登录且关闭游客评论：才显示登录提示 */}
           {!profile && !guestEnabled && (
             <div className="flex w-full flex-col items-center justify-center py-8">
-              <p className="mb-4 text-sm text-gray-600">
+              <p className="mb-4 text-sm t-secondary">
                 {t("login.required")}
               </p>
 
               <button
                 type="button"
-                className="rounded-full bg-black px-5 py-2.5 text-white"
+                className="rounded-full bg-theme px-5 py-2.5 text-white transition hover:bg-theme-hover"
                 onClick={() => setLocation("/login")}
               >
                 {t("login.required")}
@@ -788,13 +778,12 @@ function CommentInput({
             </div>
           )}
 
-          {/* 已登录用户或允许游客评论时，显示评论编辑区域 */}
           {(profile || guestEnabled) && (
             <>
               <textarea
                 id="comment"
                 placeholder={t("comment.placeholder.title")}
-                className="min-h-32 w-full rounded-lg border border-gray-200 bg-white p-3 text-gray-900 outline-none focus:border-gray-400"
+                className="min-h-32 w-full rounded-lg border border-black/10 bg-secondary p-3 t-primary outline-none placeholder:text-neutral-400 focus:border-theme dark:border-white/10"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
@@ -805,7 +794,7 @@ function CommentInput({
                 </div>
               )}
 
-              <label className="mt-4 flex w-full items-center gap-2 text-sm text-gray-600">
+              <label className="mt-4 flex w-full items-center gap-2 text-sm t-secondary">
                 <input
                   type="checkbox"
                   checked={agreed}
@@ -819,7 +808,7 @@ function CommentInput({
                     href="https://blog.otaoi.top/feed/1"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 underline"
+                    className="text-theme underline"
                   >
                     《评论发表协议》
                   </a>
@@ -827,7 +816,7 @@ function CommentInput({
               </label>
 
               {error && (
-                <p className="mt-3 text-sm text-red-600" role="alert">
+                <p className="mt-3 text-sm text-red-500" role="alert">
                   {error}
                 </p>
               )}
@@ -835,10 +824,10 @@ function CommentInput({
               <div className="mt-5 flex justify-end">
                 <button
                   type="button"
-                  className={`rounded-full px-6 py-3 font-medium text-white transition-colors ${
+                  className={`rounded-full px-6 py-3 font-medium transition-colors ${
                     canSubmit
-                      ? "bg-theme hover:opacity-90"
-                      : "cursor-not-allowed bg-neutral-800 opacity-60"
+                      ? "bg-theme text-white hover:bg-theme-hover"
+                      : "cursor-not-allowed bg-secondary t-secondary opacity-60"
                   }`}
                   onClick={submit}
                   disabled={!canSubmit}
@@ -855,6 +844,7 @@ function CommentInput({
     </>
   );
 }
+
 type Comment = {
   id: number;
   content: string;
@@ -900,9 +890,7 @@ function Comments({ id }: { id: string }) {
     <>
       {config.getBoolean("comment.enabled") && (
         <div className="m-2 flex min-w-0 flex-col">
-          {/* 评论区顶部面板 */}
           <div className="flex w-full min-w-0 items-center justify-between gap-2 rounded-2xl bg-w p-4 sm:gap-3 sm:p-5">
-            {/* 左侧标题和评论数量 */}
             <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="shrink-0 text-lg font-bold t-primary">
                 评论
@@ -913,11 +901,9 @@ function Comments({ id }: { id: string }) {
               </span>
             </div>
 
-            {/* 右侧留言按钮 */}
             <CommentInput id={id} onRefresh={loadComments} />
           </div>
 
-          {/* 评论加载错误 */}
           {error && (
             <div className="flex flex-col wauto rounded-2xl bg-w t-primary m-2 p-6 items-center justify-center">
               <h1 className="text-xl font-bold t-primary">
@@ -933,7 +919,6 @@ function Comments({ id }: { id: string }) {
             </div>
           )}
 
-          {/* 评论列表 */}
           {comments.length > 0 && (
             <div className="w-full">
               {comments.map((comment) => (
@@ -963,7 +948,6 @@ function CommentItem({
   const { t } = useTranslation();
   const profile = useContext(ProfileContext);
 
-  // 只有管理员可以查看游客邮箱
   const isAdmin = Boolean(profile?.permission);
 
   const commenterName =
