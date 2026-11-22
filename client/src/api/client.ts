@@ -1,9 +1,7 @@
 // API Client for Rin - Type-safe HTTP client to replace Eden
 // This client provides a clean, type-safe interface for all backend API endpoints
-
 import { getAuthToken } from "../utils/auth";
 import { endpoint } from "../config";
-
 // Import shared types
 import type {
   ApiResponse,
@@ -34,12 +32,10 @@ import type {
   LoginRequest,
   LoginResponse,
 } from "@rin/api";
-
 export interface SettingsConfigResponse {
   clientConfig: ConfigResponse;
   serverConfig: ConfigResponse;
 }
-
 export interface ConfigHealthItem {
   id: string;
   title: {
@@ -65,13 +61,11 @@ export interface ConfigHealthItem {
     values?: Record<string, string | number | boolean>;
   }>;
 }
-
 export interface ConfigHealthResponse {
   generatedAt: string;
   summary: Record<"success" | "warning" | "danger", number>;
   items: ConfigHealthItem[];
 }
-
 export interface QueueStatusItem {
   id: number;
   title: string | null;
@@ -80,18 +74,15 @@ export interface QueueStatusItem {
   updatedAt: string;
   createdAt: string;
 }
-
 export interface QueueStatusResponse {
   queueConfigured: boolean;
   generatedAt: string;
   summary: Record<"idle" | "pending" | "processing" | "completed" | "failed", number>;
   items: QueueStatusItem[];
 }
-
 export interface QueueTaskActionResponse {
   success: boolean;
 }
-
 export interface CompatTasksResponse {
   generatedAt: string;
   aiSummary: {
@@ -104,28 +95,23 @@ export interface CompatTasksResponse {
     eligible: number;
   };
 }
-
 export interface CompatAISummaryActionResponse {
   queued: number;
   skipped: number;
   forced: boolean;
 }
-
 export interface CompatBlurhashCandidate {
   id: number;
   title: string | null;
   content: string;
 }
-
 export interface CompatBlurhashCandidatesResponse {
   generatedAt: string;
   items: CompatBlurhashCandidate[];
 }
-
 export interface CompatBlurhashApplyResponse {
   updated: boolean;
 }
-
 // Re-export for external use
 export type {
   ApiResponse,
@@ -156,14 +142,11 @@ export type {
   LoginRequest,
   LoginResponse,
 } from "@rin/api";
-
-
 /**
  * HTTP client for making API requests
  */
 class HttpClient {
   constructor(private baseUrl: string) {}
-
   private async request<T>(
     method: string,
     path: string,
@@ -175,17 +158,14 @@ class HttpClient {
       Accept: "application/json",
       ...options?.headers,
     };
-
     // Add auth token if available
     const token = getAuthToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-
     if (body !== undefined && !(body instanceof FormData)) {
       headers["Content-Type"] = "application/json";
     }
-
     try {
       const response = await fetch(url, {
         method,
@@ -193,12 +173,10 @@ class HttpClient {
         body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
         credentials: "include",
       });
-
       // Handle 204 No Content
       if (response.status === 204) {
         return { data: undefined as T };
       }
-
       if (!response.ok) {
         let errorValue: unknown;
         const responseClone = response.clone();
@@ -209,10 +187,9 @@ class HttpClient {
         }
         // Extract error message from various formats
         let errorMessage: string;
-        if (typeof errorValue === 'string') {
+        if (typeof errorValue === "string") {
           errorMessage = errorValue;
-        } else if (errorValue && typeof errorValue === 'object') {
-          // Handle { error: { message: string } } format
+        } else if (errorValue && typeof errorValue === "object") {
           const err = errorValue as any;
           errorMessage = err.error?.message || err.message || err.error || JSON.stringify(errorValue);
         } else {
@@ -225,20 +202,17 @@ class HttpClient {
           },
         };
       }
-
       // Check if response has content
       const contentLength = response.headers.get("content-length");
       if (contentLength === "0") {
         return { data: undefined as T };
       }
-
       // Try to parse JSON, fallback to text
       const contentType = response.headers.get("content-type");
       if (contentType?.includes("application/json")) {
         const data = await response.json();
         return { data };
       }
-
       const text = await response.text();
       return { data: text as T };
     } catch (error) {
@@ -250,98 +224,79 @@ class HttpClient {
       };
     }
   }
-
   async get<T>(path: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("GET", path, undefined, options);
   }
-
   async post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("POST", path, body, options);
   }
-
   async put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("PUT", path, body, options);
   }
-
   async patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("PATCH", path, body, options);
   }
-
   async delete<T>(path: string, options?: RequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>("DELETE", path, undefined, options);
   }
 }
-
 /**
  * Feed API methods
  */
 class FeedAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/feed
-  async list(params?: { page?: number; limit?: number; type?: 'draft' | 'unlisted' | 'normal' }): Promise<ApiResponse<FeedListResponse>> {
+  async list(params?: { page?: number; limit?: number; type?: "draft" | "unlisted" | "normal" }): Promise<ApiResponse<FeedListResponse>> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set("page", params.page.toString());
     if (params?.limit) searchParams.set("limit", params.limit.toString());
     if (params?.type) searchParams.set("type", params.type);
-    
     const query = searchParams.toString();
     return this.http.get<FeedListResponse>(`/api/feed${query ? `?${query}` : ""}`);
   }
-
   // GET /api/feed/timeline
   async timeline(): Promise<ApiResponse<TimelineItem[]>> {
     return this.http.get<TimelineItem[]>("/api/feed/timeline");
   }
-
   // GET /api/feed/:id
   async get(id: number | string): Promise<ApiResponse<Feed>> {
     return this.http.get<Feed>(`/api/feed/${id}`);
   }
-
   // POST /api/feed
   async create(body: CreateFeedRequest): Promise<ApiResponse<{ insertedId: number }>> {
     return this.http.post<{ insertedId: number }>("/api/feed", body);
   }
-
   // POST /api/feed/:id
   async update(id: number, body: UpdateFeedRequest): Promise<ApiResponse<void>> {
     return this.http.post<void>(`/api/feed/${id}`, body);
   }
-
   // DELETE /api/feed/:id
   async delete(id: number): Promise<ApiResponse<void>> {
     return this.http.delete<void>(`/api/feed/${id}`);
   }
-
   // GET /api/feed/adjacent/:id
   async adjacent(id: number | string): Promise<ApiResponse<AdjacentFeedResponse>> {
     return this.http.get<AdjacentFeedResponse>(`/api/feed/adjacent/${id}`);
   }
-
   // POST /api/feed/top/:id
   async setTop(id: number, top: number): Promise<ApiResponse<void>> {
     return this.http.post<void>(`/api/feed/top/${id}`, { top });
   }
 }
-
 /**
  * Tag API methods
  */
 class TagAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/tag
   async list(): Promise<ApiResponse<Tag[]>> {
     return this.http.get<Tag[]>("/api/tag");
   }
-
   // GET /api/tag/:name
   async get(name: string): Promise<ApiResponse<TagDetail>> {
     return this.http.get<TagDetail>(`/api/tag/${encodeURIComponent(name)}`);
   }
 }
-
 /**
  * Comment API methods
  */
@@ -351,6 +306,7 @@ export interface PendingComment {
   userId: number | null;
   content: string;
   guestName: string | null;
+  guestEmail: string | null;
   guestWebsite: string | null;
   approved: number;
   createdAt: string | number;
@@ -388,158 +344,127 @@ class CommentAPI {
     return this.http.delete<void>(`/api/comment/${id}`);
   }
 }
-
 /**
  * User API methods
  */
 class UserAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/user/profile
   async profile(): Promise<ApiResponse<UserProfile>> {
     return this.http.get<UserProfile>("/api/user/profile");
   }
-
   // PUT /api/user/profile
   async updateProfile(body: UpdateProfileRequest): Promise<ApiResponse<{ success: boolean }>> {
     return this.http.put<{ success: boolean }>("/api/user/profile", body);
   }
-
   // POST /api/user/logout
   async logout(): Promise<ApiResponse<void>> {
     return this.http.post<void>("/api/user/logout");
   }
-
   // GET /api/user/github
   githubAuth(): string {
     return `${endpoint}/api/user/github`;
   }
 }
-
 /**
  * Friend API methods
  */
 class FriendAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/friend
   async list(): Promise<ApiResponse<FriendListResponse>> {
     return this.http.get<FriendListResponse>("/api/friend");
   }
-
   // POST /api/friend
   async create(body: CreateFriendRequest): Promise<ApiResponse<Friend>> {
     return this.http.post<Friend>("/api/friend", body);
   }
-
   // PUT /api/friend/:id
   async update(id: number, body: UpdateFriendRequest): Promise<ApiResponse<Friend>> {
     return this.http.put<Friend>(`/api/friend/${id}`, body);
   }
-
   // DELETE /api/friend/:id
   async delete(id: number): Promise<ApiResponse<void>> {
     return this.http.delete<void>(`/api/friend/${id}`);
   }
 }
-
 /**
  * Moments API methods
  */
 class MomentsAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/moments
   async list(params?: { page?: number; limit?: number }): Promise<ApiResponse<{ data: Moment[]; hasNext: boolean }>> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set("page", params.page.toString());
     if (params?.limit) searchParams.set("limit", params.limit.toString());
-    
     const query = searchParams.toString();
     return this.http.get<{ data: Moment[]; hasNext: boolean }>(`/api/moments${query ? `?${query}` : ""}`);
   }
-
   // POST /api/moments
   async create(body: CreateMomentRequest): Promise<ApiResponse<Moment>> {
     return this.http.post<Moment>("/api/moments", body);
   }
-
   // POST /api/moments/:id
   async update(id: number, body: CreateMomentRequest): Promise<ApiResponse<Moment>> {
     return this.http.post<Moment>(`/api/moments/${id}`, body);
   }
-
   // DELETE /api/moments/:id
   async delete(id: number): Promise<ApiResponse<void>> {
     return this.http.delete<void>(`/api/moments/${id}`);
   }
 }
-
 /**
  * Config API methods
  */
 class ConfigAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/config
   async getAll(): Promise<ApiResponse<SettingsConfigResponse>> {
     return this.http.get<SettingsConfigResponse>("/api/config");
   }
-
   // GET /api/config/:type
   async get(type: ConfigType): Promise<ApiResponse<ConfigResponse>> {
     return this.http.get<ConfigResponse>(`/api/config/${type}`);
   }
-
   // POST /api/config
   async updateAll(body: SettingsConfigResponse): Promise<ApiResponse<SettingsConfigResponse>> {
     return this.http.post<SettingsConfigResponse>("/api/config", body);
   }
-
   // POST /api/config/:type
   async update(type: ConfigType, body: Record<string, unknown>): Promise<ApiResponse<void>> {
     return this.http.post<void>(`/api/config/${type}`, body);
   }
-
   // DELETE /api/config/cache
   async clearCache(): Promise<ApiResponse<void>> {
     return this.http.delete<void>("/api/config/cache");
   }
-
   // GET /api/config/health
   async getHealth(): Promise<ApiResponse<ConfigHealthResponse>> {
     return this.http.get<ConfigHealthResponse>("/api/config/health");
   }
-
   // GET /api/config/queue-status
   async getQueueStatus(): Promise<ApiResponse<QueueStatusResponse>> {
     return this.http.get<QueueStatusResponse>("/api/config/queue-status");
   }
-
   async getCompatTasks(): Promise<ApiResponse<CompatTasksResponse>> {
     return this.http.get<CompatTasksResponse>("/api/config/compat-tasks");
   }
-
   async runCompatAISummary(force = false): Promise<ApiResponse<CompatAISummaryActionResponse>> {
     return this.http.post<CompatAISummaryActionResponse>("/api/config/compat-tasks/ai-summary", { force });
   }
-
   async getCompatBlurhashCandidates(): Promise<ApiResponse<CompatBlurhashCandidatesResponse>> {
     return this.http.get<CompatBlurhashCandidatesResponse>("/api/config/compat-tasks/blurhash");
   }
-
   async applyCompatBlurhash(feedId: number, content: string): Promise<ApiResponse<CompatBlurhashApplyResponse>> {
     return this.http.post<CompatBlurhashApplyResponse>(`/api/config/compat-tasks/blurhash/${feedId}`, { content });
   }
-
   async retryQueueTask(feedId: number): Promise<ApiResponse<QueueTaskActionResponse>> {
     return this.http.post<QueueTaskActionResponse>(`/api/config/queue-status/${feedId}/retry`);
   }
-
   async deleteQueueTask(feedId: number): Promise<ApiResponse<QueueTaskActionResponse>> {
     return this.http.delete<QueueTaskActionResponse>(`/api/config/queue-status/${feedId}`);
   }
-
   // POST /api/config/test-ai - Test AI model configuration
   async testAI(body: {
     provider?: string;
@@ -550,7 +475,6 @@ class ConfigAPI {
   }): Promise<ApiResponse<{ success: boolean; response?: string; error?: string; details?: string; provider?: string; model?: string }>> {
     return this.http.post<any>("/api/config/test-ai", body);
   }
-
   async testWebhook(body: {
     webhook_url?: string;
     "webhook.method"?: string;
@@ -562,118 +486,98 @@ class ConfigAPI {
     return this.http.post("/api/config/test-webhook", body);
   }
 }
-
 /**
  * AI Config API methods (deprecated, use ConfigAPI instead)
  * @deprecated AI config is now part of server config. Use client.config.get('server') and client.config.update('server', {...}) instead.
  */
 class AIConfigAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/ai-config
   /** @deprecated Use client.config.get('server') instead */
   async get(): Promise<ApiResponse<AIConfig>> {
     return this.http.get<AIConfig>("/api/ai-config");
   }
-
   // POST /api/ai-config
   /** @deprecated Use client.config.update('server', {...}) instead */
   async update(body: Partial<AIConfig>): Promise<ApiResponse<void>> {
     return this.http.post<void>("/api/ai-config", body);
   }
 }
-
 /**
  * Storage API methods
  */
 class StorageAPI {
   constructor(private http: HttpClient) {}
-
   // POST /api/storage
   async upload(file: File, key?: string): Promise<ApiResponse<UploadResponse>> {
     const formData = new FormData();
     formData.append("file", file);
     if (key) formData.append("key", key);
-    
     return this.http.post<UploadResponse>("/api/storage", formData);
   }
 }
-
 /**
  * Search API methods
  */
 class SearchAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/search/:keyword
   async search(keyword: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<FeedListResponse>> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set("page", params.page.toString());
     if (params?.limit) searchParams.set("limit", params.limit.toString());
-
     const query = searchParams.toString();
     return this.http.get<FeedListResponse>(`/api/search/${encodeURIComponent(keyword)}${query ? `?${query}` : ""}`);
   }
 }
-
 /**
  * Auth API methods
  */
 class AuthAPI {
   constructor(private http: HttpClient) {}
-
   // GET /api/auth/status
   async status(): Promise<ApiResponse<AuthStatus>> {
     return this.http.get<AuthStatus>("/api/auth/status");
   }
-
   // POST /api/auth/login
   async login(body: LoginRequest): Promise<ApiResponse<LoginResponse>> {
     return this.http.post<LoginResponse>("/api/auth/login", body);
   }
 }
-
 /**
  * WordPress Import API methods
  */
 class WordPressAPI {
   constructor(private http: HttpClient) {}
-
   // POST /api/wp
   async import(xml: string): Promise<ApiResponse<{ imported: number }>> {
     return this.http.post<{ imported: number }>("/api/wp", { xml });
   }
 }
-
 /**
  * RSS API methods - direct fetch for RSS feeds
  */
 class RSSAPI {
   constructor(private baseUrl: string) {}
-
   // GET /rss.xml
   async getRSS(): Promise<string> {
     const response = await fetch(`${this.baseUrl}/rss.xml`);
     return response.text();
   }
-
   // GET /atom.xml
   async getAtom(): Promise<string> {
     const response = await fetch(`${this.baseUrl}/atom.xml`);
     return response.text();
   }
-
   // GET /rss.json
   async getJSON(): Promise<unknown> {
     const response = await fetch(`${this.baseUrl}/rss.json`);
     return response.json();
   }
 }
-
 // ============================================================================
 // Main API Client Class
 // ============================================================================
-
 export class ApiClient {
   private http: HttpClient;
   feed: FeedAPI;
@@ -689,7 +593,6 @@ export class ApiClient {
   auth: AuthAPI;
   wp: WordPressAPI;
   rss: RSSAPI;
-
   constructor(baseUrl: string) {
     this.http = new HttpClient(baseUrl);
     this.feed = new FeedAPI(this.http);
@@ -707,14 +610,11 @@ export class ApiClient {
     this.rss = new RSSAPI(baseUrl);
   }
 }
-
 // ============================================================================
 // Factory Function (Eden-compatible interface)
 // ============================================================================
-
 export function createClient(baseUrl: string): ApiClient {
   return new ApiClient(baseUrl);
 }
-
 // Default export
 export default ApiClient;
