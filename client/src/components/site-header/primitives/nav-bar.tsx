@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 
@@ -14,10 +14,28 @@ export function NavBar({
   const [location] = useLocation();
   const { t } = useTranslation();
   const [otherOpen, setOtherOpen] = useState(false);
+  const otherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setOtherOpen(false);
   }, [location]);
+
+  useEffect(() => {
+    function handleClickOutside(event: PointerEvent) {
+      if (
+        otherRef.current &&
+        !otherRef.current.contains(event.target as Node)
+      ) {
+        setOtherOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleClickOutside);
+    };
+  }, []);
 
   const otherSelected = location === "/open-source-license";
 
@@ -30,17 +48,26 @@ export function NavBar({
       <NavItem menu={menu} onClick={onClick} itemClassName={itemClassName} title={t("friends.title")} selected={location === "/friends"} href="/friends" />
       <NavItem menu={menu} onClick={onClick} itemClassName={itemClassName} title={t("about.title")} selected={location === "/about"} href="/about" />
 
-      <div className={`relative ${menu ? "w-full" : "inline-flex"}`}>
+      <div
+        ref={otherRef}
+        className={`relative ${menu ? "w-full" : "inline-flex"}`}
+      >
         <button
           type="button"
           onClick={() => setOtherOpen((value) => !value)}
           aria-expanded={otherOpen}
-          className={`${menu ? "w-full text-left" : ""} cursor-pointer px-2 py-4 md:p-4 text-sm duration-300 hover:text-theme ${
+          aria-haspopup="true"
+          className={`${menu ? "w-full text-left" : ""} inline-flex items-center cursor-pointer px-2 py-4 md:p-4 text-sm duration-300 hover:text-theme ${
             otherSelected ? "text-theme" : "dark:text-white"
           } ${itemClassName}`}
         >
           其他
-          <i className={`ri-arrow-down-s-line ml-1 transition-transform ${otherOpen ? "rotate-180" : ""}`} />
+          <i
+            className={`${
+              otherOpen ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"
+            } ml-1 text-lg transition-all duration-200`}
+            aria-hidden="true"
+          />
         </button>
 
         {otherOpen && (
@@ -59,7 +86,9 @@ export function NavBar({
                 onClick?.();
               }}
               className={`block rounded-lg px-4 py-3 text-sm transition-colors hover:bg-black/5 dark:hover:bg-white/10 ${
-                otherSelected ? "text-theme" : "text-neutral-700 dark:text-neutral-200"
+                otherSelected
+                  ? "text-theme"
+                  : "text-neutral-700 dark:text-neutral-200"
               }`}
             >
               开源项目使用协议
