@@ -8,43 +8,31 @@ import { useAlert } from "../components/dialog";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { siteName } from "../utils/constants";
 import type { PendingComment } from "../api/client";
-
 export function CommentsPage() {
   useTranslation();
   const siteConfig = useSiteConfig();
   const { showAlert, AlertUI } = useAlert();
-
   const [comments, setComments] = useState<PendingComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<number | null>(null);
-
   const loadComments = useCallback(async () => {
     setLoading(true);
-
     const { data, error } = await client.comment.pending();
-
     if (error) {
       showAlert(error.value as string);
     }
-
     if (data) {
       setComments(data);
     }
-
     setLoading(false);
   }, [showAlert]);
-
   useEffect(() => {
     loadComments();
   }, [loadComments]);
-
   async function approveComment(id: number) {
     if (processing !== null) return;
-
     setProcessing(id);
-
     const { error } = await client.comment.approve(id);
-
     if (error) {
       showAlert(error.value as string);
     } else {
@@ -53,21 +41,15 @@ export function CommentsPage() {
       );
       showAlert("评论已批准并公开");
     }
-
     setProcessing(null);
   }
-
   async function deleteComment(id: number) {
     if (processing !== null) return;
-
     if (!window.confirm("确定要删除这条评论吗？此操作不可撤销。")) {
       return;
     }
-
     setProcessing(id);
-
     const { error } = await client.comment.delete(id);
-
     if (error) {
       showAlert(error.value as string);
     } else {
@@ -76,20 +58,15 @@ export function CommentsPage() {
       );
       showAlert("评论已删除");
     }
-
     setProcessing(null);
   }
-
   function formatDate(value: string | number) {
     const date = new Date(value);
-
     if (Number.isNaN(date.getTime())) {
       return "时间未知";
     }
-
     return date.toLocaleString();
   }
-
   return (
     <>
       <Helmet>
@@ -98,7 +75,6 @@ export function CommentsPage() {
         <meta property="og:title" content="评论审核" />
         <meta property="og:image" content={siteConfig.avatar} />
       </Helmet>
-
       <div className="mt-2 flex flex-col gap-4 t-primary sm:gap-6">
         <FlatPanel className="p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -113,7 +89,6 @@ export function CommentsPage() {
                 审核游客和普通用户提交的评论，批准后才会公开显示。
               </p>
             </div>
-
             <button
               type="button"
               onClick={loadComments}
@@ -123,7 +98,6 @@ export function CommentsPage() {
               {loading ? "正在刷新..." : "刷新列表"}
             </button>
           </div>
-
           <div className="mt-5 flex items-center gap-2 border-t border-black/5 pt-4 dark:border-white/5">
             <span className="text-sm text-neutral-500 dark:text-neutral-400">
               待审核评论
@@ -133,7 +107,6 @@ export function CommentsPage() {
             </span>
           </div>
         </FlatPanel>
-
         {loading ? (
           <FlatPanel className="flex items-center justify-center gap-3 p-10">
             <Loading type="spin" height={22} width={22} />
@@ -156,7 +129,9 @@ export function CommentsPage() {
                 comment.user?.username ||
                 comment.guestName ||
                 "游客";
-
+              const guestEmail = comment.user
+                ? null
+                : comment.guestEmail?.trim() || null;
               return (
                 <FlatPanel
                   key={comment.id}
@@ -170,25 +145,25 @@ export function CommentsPage() {
                           待审核
                         </span>
                       </div>
-
+                      {guestEmail && (
+                        <p className="mt-2 break-all text-sm text-theme">
+                          游客邮箱：{guestEmail}
+                        </p>
+                      )}
                       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                         文章：{comment.feed?.title || "文章已不存在"}
                       </p>
-
                       <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                         提交时间：{formatDate(comment.createdAt)}
                       </p>
                     </div>
-
                     <span className="text-xs text-neutral-400">
                       #{comment.id}
                     </span>
                   </div>
-
                   <div className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-secondary p-4 text-sm leading-7">
                     {comment.content}
                   </div>
-
                   <div className="mt-4 flex flex-wrap justify-end gap-3">
                     <button
                       type="button"
@@ -200,7 +175,6 @@ export function CommentsPage() {
                         ? "处理中..."
                         : "删除评论"}
                     </button>
-
                     <button
                       type="button"
                       onClick={() => approveComment(comment.id)}
@@ -218,7 +192,6 @@ export function CommentsPage() {
           </div>
         )}
       </div>
-
       <AlertUI />
     </>
   );
