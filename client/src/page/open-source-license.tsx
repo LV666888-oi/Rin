@@ -41,7 +41,7 @@ export function OpenSourceLicensePage() {
         className="mb-10 inline-flex items-center gap-2 text-sm font-medium text-neutral-900 transition-opacity hover:opacity-60 dark:text-white"
       >
         <i className="ri-arrow-left-line text-lg" />
-        Back
+        返回
       </button>
 
       <header className="mb-10">
