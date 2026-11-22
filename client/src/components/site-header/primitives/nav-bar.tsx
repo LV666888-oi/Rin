@@ -50,14 +50,18 @@ export function NavBar({
 
       <div
         ref={otherRef}
-        className={`relative ${menu ? "w-full" : "inline-flex"}`}
+        className={`relative ${
+          menu ? "w-full" : "hidden md:inline-flex"
+        }`}
       >
         <button
           type="button"
           onClick={() => setOtherOpen((value) => !value)}
           aria-expanded={otherOpen}
           aria-haspopup="true"
-          className={`${menu ? "w-full text-left" : ""} inline-flex items-center cursor-pointer px-2 py-4 md:p-4 text-sm duration-300 hover:text-theme ${
+          className={`${
+            menu ? "w-full text-left" : ""
+          } inline-flex items-center cursor-pointer px-2 py-4 md:p-4 text-sm duration-300 hover:text-theme ${
             otherSelected ? "text-theme" : "dark:text-white"
           } ${itemClassName}`}
         >
