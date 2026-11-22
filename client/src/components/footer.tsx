@@ -102,7 +102,7 @@ function Footer() {
         setDoubleClickTimes(doubleClickTimes + 1)
     }
 }}>
-    品品科技 © {new Date().getFullYear()} LVLVTECHNOLD
+    吕吕科技 © {new Date().getFullYear()} LVLVTECHNOLD
 </span>
                     {config.getBoolean('rss') && <>
                         <Spliter />
