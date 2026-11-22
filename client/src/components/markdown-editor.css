@@ -1,84 +1,79 @@
 /* CodeMirror Markdown Editor */
 
 .markdown-cm-wrapper {
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  background: transparent;
+width: 100%;
+min-width: 0;
+overflow: visible;
+background: transparent;
 }
 
 .markdown-cm-wrapper .cm-editor {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  color: inherit;
-  font-size: 14px;
+width: 100%;
+height: 100%;
+background: transparent;
+color: inherit;
+font-size: 14px;
+overflow: hidden;
 }
 
 .markdown-cm-wrapper .cm-scroller {
-  overflow: auto;
-  font-family: "Sarasa Mono SC", "JetBrains Mono", monospace;
-  line-height: 1.7;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+height: 100%;
+overflow-x: hidden !important;
+overflow-y: auto !important;
+font-family: “Sarasa Mono SC”, “JetBrains Mono”, monospace;
+line-height: 1.7;
+-webkit-overflow-scrolling: touch;
+overscroll-behavior-y: auto;
 }
 
 .markdown-cm-wrapper .cm-content {
-  min-height: 100%;
-  padding: 16px;
-  caret-color: currentColor;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+min-height: 100%;
+padding: 16px;
+caret-color: currentColor;
+white-space: pre-wrap;
+overflow-wrap: anywhere;
+-webkit-user-select: text;
+user-select: text;
+-webkit-touch-callout: default;
 }
 
 .markdown-cm-wrapper .cm-line {
-  padding: 0;
+padding: 0;
+-webkit-user-select: text;
+user-select: text;
 }
 
 .markdown-cm-wrapper .cm-gutters {
-  display: none;
+display: none;
 }
 
 .markdown-cm-wrapper .cm-editor.cm-focused {
-  outline: none;
+outline: none;
 }
 
 .markdown-cm-wrapper .cm-selectionBackground {
-  background: rgba(59, 130, 246, 0.25) !important;
+background: rgba(59, 130, 246, 0.25) !important;
 }
 
 .markdown-cm-wrapper .cm-cursor {
-  border-left-width: 2px;
+border-left-width: 2px;
 }
 
 .markdown-cm-wrapper .cm-placeholder {
-  opacity: 0.5;
-  font-style: normal;
-}
-
-/* Mobile selection and touch support */
-
-.markdown-cm-wrapper .cm-content,
-.markdown-cm-wrapper .cm-line {
-  -webkit-user-select: text;
-  user-select: text;
-  -webkit-touch-callout: default;
-}
-
-.markdown-cm-wrapper .cm-scroller {
-  touch-action: pan-y;
+opacity: 0.5;
+font-style: normal;
 }
 
 /* Dark mode */
 
 .dark .markdown-cm-wrapper .cm-editor {
-  background: transparent;
+background: transparent;
 }
 
 .dark .markdown-cm-wrapper .cm-content {
-  color: inherit;
+color: inherit;
 }
 
 .dark .markdown-cm-wrapper .cm-placeholder {
-  color: rgba(255, 255, 255, 0.45);
+color: rgba(255, 255, 255, 0.45);
 }
