@@ -421,7 +421,6 @@ export function TOCHeader({ TOC }: { TOC: () => JSX.Element }) {
     </div>
   );
 }
-
 function CommentInput({
   id,
   onRefresh,
@@ -964,6 +963,9 @@ function CommentItem({
   const { t } = useTranslation();
   const profile = useContext(ProfileContext);
 
+  // 只有管理员可以查看游客邮箱
+  const isAdmin = Boolean(profile?.permission);
+
   const commenterName =
     comment.user?.username ||
     comment.guestName ||
@@ -994,6 +996,12 @@ function CommentItem({
           <span className="min-w-0 truncate text-base font-bold t-primary">
             {commenterName}
           </span>
+
+          {isAdmin && !comment.user && comment.guestEmail && (
+            <span className="min-w-0 break-all text-xs text-gray-400">
+              游客邮箱：{comment.guestEmail}
+            </span>
+          )}
 
           {comment.guestWebsite && (
             <a
