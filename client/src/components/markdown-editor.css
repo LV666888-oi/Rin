@@ -1,6 +1,30 @@
 /* CodeMirror Markdown Editor */
 
-.markdown-cm-wrapper {
+.markdown-cm-wrapper .cm-scroller {
+  display: flex !important;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden !important;
+  overflow-y: scroll !important;
+  font-family: "Sarasa Mono SC", "JetBrains Mono", monospace;
+  line-height: 1.7;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
+}
+
+.markdown-cm-wrapper .cm-content {
+  flex: 1 0 auto;
+  min-height: 100%;
+  padding: 16px;
+  caret-color: currentColor;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
 width: 100%;
 min-width: 0;
 overflow: hidden;
