@@ -1,485 +1,1002 @@
-import "katex/dist/katex.min.css";
-import React, { cloneElement, isValidElement, useEffect, useMemo, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import {
-  base16AteliersulphurpoolLight,
-  vscDarkPlus,
-} from "react-syntax-highlighter/dist/esm/styles/prism";
-import rehypeKatex from "rehype-katex";
-import rehypeRaw from "rehype-raw";
-import gfm from "remark-gfm";
-import remarkMermaid from "../remark/remarkMermaid";
-import { remarkAlert } from "remark-github-blockquote-alert";
-import remarkMath from "remark-math";
-import remarkBreaks from "remark-breaks";
-import Lightbox, { SlideImage } from "yet-another-react-lightbox";
-import Counter from "yet-another-react-lightbox/plugins/counter";
-import Download from "yet-another-react-lightbox/plugins/download";
-import Zoom from "yet-another-react-lightbox/plugins/zoom";
-import "yet-another-react-lightbox/styles.css";
-import { drawBlurhashToCanvas } from "../utils/blurhash";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown } from "@codemirror/lang-markdown";
+import { EditorView } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { useTranslation } from "react-i18next";
+import Loading from "react-loading";
+
+import { FlatInset, FlatTabButton } from "@rin/ui";
+import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
-import { parseImageUrlMetadata } from "../utils/image-upload";
-import { useImageLoadState } from "../utils/use-image-load-state";
+import {
+  buildMarkdownImage,
+  uploadImageFile,
+} from "../utils/image-upload";
+import { Markdown } from "./markdown";
 
+import "./markdown-editor.css";
 
-const countNewlinesBeforeNode = (text: string, offset: number) => {
-  let newlinesBefore = 0;
-  for (let i = offset - 1; i >= 0; i--) {
-    if (text[i] === "\n") {
-      newlinesBefore++;
-    } else {
-      break;
-    }
-  }
-  return newlinesBefore;
-};
+interface MarkdownEditorProps {
+  content: string;
+  setContent: (content: string) => void;
+  placeholder?: string;
+  height?: string;
+}
 
-const isMarkdownImageLinkAtEnd = (text: string) => {
-  const trimmed = text.trim();
-
-  const match = trimmed.match(/(.*)(!\\[.*?\\]\\(.*?\\))$/s);
-
-  if (match) {
-    const [, beforeImage, _] = match;
-
-    return beforeImage.trim().length === 0 || beforeImage.endsWith("\n");
-  }
-
-  return false;
-};
-
-function MarkdownImage({
-  src,
-  alt,
-  show,
-  rounded,
-  scale,
-  className,
+function MarkdownToolButton({
+  label,
+  icon,
+  onClick,
+  disabled = false,
 }: {
-  src?: string;
-  alt?: string;
-  show: (src?: string) => void;
-  rounded: boolean;
-  scale: string;
-  className?: string;
+  label: string;
+  icon: string;
+  onClick: () => void;
+  disabled?: boolean;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { src: cleanSrc, blurhash, width, height } = parseImageUrlMetadata(src);
-  const { failed, imageRef, loaded, onError, onLoad } = useImageLoadState(cleanSrc);
-  const roundedClass = rounded ? "rounded-xl" : "";
-  const aspectRatio = width && height ? `${width} / ${height}` : undefined;
-
-  useEffect(() => {
-    if (!blurhash || !canvasRef.current) {
-      return;
-    }
-    try {
-      drawBlurhashToCanvas(canvasRef.current, blurhash);
-    } catch (error) {
-      console.error("Failed to render blurhash", error);
-    }
-  }, [blurhash]);
-
   return (
-    <span
-      className={`relative inline-block max-w-full overflow-hidden ${roundedClass}`}
-      style={{ zoom: scale, aspectRatio }}
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-transparent text-lg t-secondary transition-colors hover:border-black/10 hover:bg-neutral-100 hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme disabled:cursor-not-allowed disabled:opacity-50 dark:hover:border-white/10 dark:hover:bg-neutral-700 dark:hover:text-white sm:h-10 sm:w-10"
     >
-      {blurhash && !loaded ? (
-        <canvas
-          ref={canvasRef}
-          aria-hidden="true"
-          className={`absolute inset-0 h-full w-full scale-110 blur-sm ${roundedClass}`}
-        />
-      ) : null}
-      {failed && !blurhash ? (
-        <span
-          aria-label={alt || undefined}
-          role={alt ? "img" : undefined}
-          className={`${rounded ? "flex min-h-32 min-w-48" : "inline-flex h-8 w-8"} items-center justify-center bg-neutral-100 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-500 ${roundedClass}`}
-        >
-          <i className="ri-image-line" aria-hidden="true" />
-        </span>
-      ) : null}
-      <img
-        ref={imageRef}
-        src={cleanSrc}
-        alt={alt}
-        width={width}
-        height={height}
-        onClick={() => {
-          show(cleanSrc);
-        }}
-        onLoad={onLoad}
-        onError={onError}
-        className={`mx-auto max-w-full cursor-zoom-in transition-opacity ${roundedClass} ${className || ""} ${
-          failed ? "hidden" : blurhash && !loaded ? "opacity-0" : "opacity-100"
-        }`}
-      />
-    </span>
+      <i className={icon} aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </button>
   );
 }
 
-export function Markdown({ content }: { content: string }) {
+export function MarkdownEditor({
+  content,
+  setContent,
+  placeholder = "> Write your content here...",
+  height = "400px",
+}: MarkdownEditorProps) {
+  const { t } = useTranslation();
   const colorMode = useColorMode();
-  const [index, setIndex] = React.useState(-1);
-  const slides = useRef<SlideImage[]>();
 
+  const editorRef = useRef<EditorView | null>(null);
+
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const autoScrollDirectionRef = useRef(0);
+  const touchPositionRef = useRef<number | null>(null);
+  const pointerPositionRef = useRef<number | null>(null);
+
+  const [preview, setPreview] = useState<
+    "edit" | "preview" | "comparison"
+  >("edit");
+
+  const [uploading, setUploading] = useState(false);
+
+  const { showAlert, AlertUI } = useAlert();
+
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      EditorView.lineWrapping,
+      EditorView.theme({
+        "&": {
+          height: "100%",
+          fontSize: "14px",
+        },
+        ".cm-scroller": {
+          overflow: "auto",
+          fontFamily: "Sarasa Mono SC, JetBrains Mono, monospace",
+          lineHeight: "1.7",
+          WebkitOverflowScrolling: "touch",
+        },
+        ".cm-content": {
+          minHeight: "100%",
+          padding: "16px",
+          caretColor: "currentColor",
+        },
+        ".cm-line": {
+          padding: "0",
+        },
+        ".cm-gutters": {
+          display: "none",
+        },
+        "&.cm-focused": {
+          outline: "none",
+        },
+        ".cm-selectionBackground": {
+          backgroundColor: "rgba(59, 130, 246, 0.25) !important",
+        },
+      }),
+    ],
+    [],
+  );
+
+  /*
+   * Mobile selection auto-scroll.
+   *
+   * When a selected range is dragged near the top or bottom
+   * edge of the editor, scroll the CodeMirror scroller.
+   */
   useEffect(() => {
-    slides.current = undefined;
-  }, [content]);
+    const stopAutoScroll = () => {
+      autoScrollDirectionRef.current = 0;
 
+      if (autoScrollFrameRef.current !== null) {
+        cancelAnimationFrame(autoScrollFrameRef.current);
+        autoScrollFrameRef.current = null;
+      }
+    };
 
+    const updateDirection = (clientY: number) => {
+      const view = editorRef.current;
 
-  const Content = useMemo(() => (
-    <ReactMarkdown
-      className="toc-content min-w-0 dark:text-neutral-300 [overflow-wrap:anywhere]"
-      remarkPlugins={[gfm, remarkMermaid, remarkMath, remarkAlert, remarkBreaks]}
-      children={content}
-      rehypePlugins={[rehypeKatex, rehypeRaw]}
-      components={{
-        img({ node, src, ...props }) {
-          const offset = node!.position!.start.offset!;
-          const previousContent = content.slice(0, offset);
-          const newlinesBefore = countNewlinesBeforeNode(
-            previousContent,
-            offset
-          );
-          const Image = ({
-            rounded,
-            scale,
-          }: {
-            rounded: boolean;
-            scale: string;
-          }) => (
-            <MarkdownImage
-              src={src}
-              alt={props.alt}
-              show={show}
-              rounded={rounded}
-              scale={scale}
-              className={props.className}
-            />
-          );
-          if (
-            newlinesBefore >= 1 ||
-            previousContent.trim().length === 0 ||
-            isMarkdownImageLinkAtEnd(previousContent)
-          ) {
-            return (
-              <span className="block w-full text-center my-4">
-                <Image scale="0.75" rounded={true} />
-              </span>
-            );
-          } else {
-            return (
-              <span className="inline-block align-middle mx-1 ">
-                <Image scale="0.5" rounded={false} />
-              </span>
-            );
-          }
-        },
-        code(props) {
-          const [copied, setCopied] = React.useState(false);
-          const { children, className, node, ...rest } = props;
-          const match = /language-(\w+)/.exec(className || "");
+      if (!view) {
+        stopAutoScroll();
+        return;
+      }
 
-          const curContent = content.slice(node?.position?.start.offset || 0);
-          const isCodeBlock = curContent.trimStart().startsWith("```");
+      const selection = view.state.selection.main;
 
-          const codeBlockStyle = {
-            fontFamily: 'ui-monospace, "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-            fontSize: "14px",
-            fontVariantLigatures: "normal",
-            WebkitFontFeatureSettings: '"liga" 1',
-            fontFeatureSettings: '"liga" 1',
-          };
+      if (selection.empty) {
+        stopAutoScroll();
+        return;
+      }
 
-          const inlineCodeStyle = {
-            ...codeBlockStyle,
-            fontSize: "13px",
-          };
+      const scroller = view.scrollDOM;
+      const rect = scroller.getBoundingClientRect();
 
-          const language = match ? match[1] : "";
+      const edgeSize = 65;
 
-          if (isCodeBlock) {
-            return (
-              <div className="relative group">
-                <SyntaxHighlighter
-                  PreTag="div"
-                  className="rounded"
-                  language={language}
-                  style={
-                    colorMode === "dark"
-                      ? vscDarkPlus
-                      : base16AteliersulphurpoolLight
-                  }
-                  wrapLongLines={true}
-                  codeTagProps={{ style: codeBlockStyle }}
-                >
-                  {String(children).replace(/\n$/, "")}
-                </SyntaxHighlighter>
-                <button className="absolute top-1 right-1 px-2 py-1 bg-w rounded-md text-sm bg-hover select-none invisible group-hover:visible"
-                  onClick={() => {
-                    navigator.clipboard.writeText(String(children));
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-            );
-          } else {
-            return (
-              <code
-                {...rest}
-                className={`bg-[#eff1f3] dark:bg-[#4a5061] h-[24px] px-[4px] rounded-md mx-[2px] py-[2px] text-neutral-800 dark:text-neutral-300 ${className || ""
-                  }`}
-                style={inlineCodeStyle}
-              >
-                {children}
-              </code>
-            );
-          }
-        },
-        blockquote({ children, ...props }) {
-          return (
-            <blockquote
-              className="border-l-4 border-gray-300 dark:border-gray-500 pl-4 italic text-gray-500 dark:text-gray-400"
-              {...props}
-            >
-              {children}
-            </blockquote>
-          );
-        },
-        em({ children, ...props }) {
-          return (
-            <em className="ml-[1px] mr-[4px]" {...props}>
-              {children}
-            </em>
-          );
-        },
-        strong({ children, ...props }) {
-          return (
-            <strong className="mx-[1px]" {...props}>
-              {children}
-            </strong>
-          );
-        },
+      if (
+        clientY < rect.top ||
+        clientY > rect.bottom
+      ) {
+        stopAutoScroll();
+        return;
+      }
 
-        ul({ children, className, ...props }) {
-          const listClass = className?.includes("contains-task-list")
-            ? "list-none pl-5"
-            : "list-disc pl-5 mt-2";
-          return (
-            <ul className={listClass} {...props}>
-              {children}
-            </ul>
-          );
-        },
-        ol({ children, ...props }) {
-          return (
-            <ol className="list-decimal pl-5" {...props}>
-              {children}
-            </ol>
-          );
-        },
-        li({ children, ...props }) {
-          return (
-            <li className="pl-2 py-1" {...props}>
-              {children}
-            </li>
-          );
-        },
-        a({ children, ...props }) {
-          return (
-            <a
-              className="break-words text-[#0686c8] hover:underline dark:text-[#2590f1] [overflow-wrap:anywhere]"
-              {...props}
-            >
-              {children}
-            </a>
-          );
-        },
-        h1({ children, ...props }) {
-          return (
-            <h1
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-3xl font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h1>
-          );
-        },
-        h2({ children, ...props }) {
-          return (
-            <h2
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-2xl font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h2>
-          );
-        },
-        h3({ children, ...props }) {
-          return (
-            <h3
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-xl font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h3>
-          );
-        },
-        h4({ children, ...props }) {
-          return (
-            <h4
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-lg font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h4>
-          );
-        },
-        h5({ children, ...props }) {
-          return (
-            <h5
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-base font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h5>
-          );
-        },
-        h6({ children, ...props }) {
-          return (
-            <h6
-              id={children?.toString()}
-              {...props}
-              className={`${props.className || ""} mt-4 break-words text-sm font-bold [overflow-wrap:anywhere]`.trim()}
-              style={{ ...props.style, scrollMarginTop: "var(--header-scroll-offset, 7rem)" }}
-            >
-              {children}
-            </h6>
-          );
-        },
-        p({ children, node, ...props }) {
-          return (
-            <p className="mt-2 break-words py-1 [overflow-wrap:anywhere]" {...props}>
-              {children}
-            </p>
-          );
-        },
-        hr({ children, ...props }) {
-          return <hr className="my-4" {...props} />;
-        },
-        table: ({ node, ...props }) => <table className="table block max-w-full overflow-x-auto" {...props} />,
-        th: ({ node, ...props }) => (
-          <th className="px-4 py-2 border bg-gray-600" {...props} />
-        ),
-        td: ({ node, ...props }) => (
-          <td className="px-4 py-2 border" {...props} />
-        ),
-        sup: ({ children, ...props }) => (
-          <sup className="text-xs mr-[4px]" {...props}>
-            {children}
-          </sup>
-        ),
-        sub: ({ children, ...props }) => (
-          <sub className="text-xs mr-[4px]" {...props}>
-            {children}
-          </sub>
-        ),
-        section({ children, ...props }) {
-          if (props.hasOwnProperty("data-footnotes")) {
-            props.className = `${props.className || ""} mt-8`.trim();
-          }
-          const modifiedChildren = React.Children.map(children, (child) => {
-            if (isValidElement(child) && child.props.node.tagName === "ol") {
-              return cloneElement(child, {
-                ...child.props,
-                className: "list-decimal px-10 text-sm text-[#6B7280]",
-              } as React.HTMLAttributes<HTMLParagraphElement>);
-            }
-            return child;
-          });
-          return <section {...props}>{modifiedChildren}</section>;
-        },
-        iframe({ node, src, title, ...props }) {
-          return (
-            <div className="my-4 w-full">
-              <iframe
-                {...props}
-                src={src}
-                title={title || "Embedded content"}
-                className="w-full rounded-xl border border-black/10 dark:border-white/10"
-                style={{ minHeight: "400px" }}
-                loading="lazy"
-                referrerPolicy="no-referrer"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              />
-            </div>
-          );
-        },
-        div({ children, node, ...props }) {
-          return <div {...props}>{children}</div>;
-        },
-      }}
-    />), [content])
+      if (clientY < rect.top + edgeSize) {
+        autoScrollDirectionRef.current = -1;
+      } else if (clientY > rect.bottom - edgeSize) {
+        autoScrollDirectionRef.current = 1;
+      } else {
+        stopAutoScroll();
+        return;
+      }
 
+      if (autoScrollFrameRef.current === null) {
+        autoScrollFrameRef.current =
+          requestAnimationFrame(autoScroll);
+      }
+    };
 
+    const autoScroll = () => {
+      autoScrollFrameRef.current = null;
 
-  const show = (src: string | undefined) => {
-    let slidesLocal = slides.current;
-    if (!slidesLocal) {
-      const parent = document.getElementsByClassName("toc-content")[0];
-      if (!parent) return;
-      const images = parent.querySelectorAll("img");
-      slidesLocal = Array.from(images)
-        .map((image) => {
-          const url = image.getAttribute("src") || "";
-          const filename = url.split("/").pop() || "";
-          const alt = image.getAttribute("alt") || "";
-          return {
-            src: url,
-            alt: alt,
-            imageFit: "contain" as const,
-            download: {
-              url: url,
-              filename: filename,
-            },
-          };
-        })
-        .filter((slide) => slide.src !== "");
-      slides.current = (slidesLocal);
-    }
-    const index = slidesLocal?.findIndex((slide) => slide.src === src) ?? -1;
-    setIndex(index);
+      const view = editorRef.current;
+
+      if (!view || autoScrollDirectionRef.current === 0) {
+        stopAutoScroll();
+        return;
+      }
+
+      const selection = view.state.selection.main;
+
+      if (selection.empty) {
+        stopAutoScroll();
+        return;
+      }
+
+      const scroller = view.scrollDOM;
+      const direction = autoScrollDirectionRef.current;
+
+      const distance = 8;
+
+      const maxScroll =
+        scroller.scrollHeight - scroller.clientHeight;
+
+      const nextScroll =
+        scroller.scrollTop + direction * distance;
+
+      if (
+        nextScroll < 0 ||
+        nextScroll > maxScroll
+      ) {
+        stopAutoScroll();
+        return;
+      }
+
+      scroller.scrollTop = nextScroll;
+
+      autoScrollFrameRef.current =
+        requestAnimationFrame(autoScroll);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+
+      if (!touch) return;
+
+      touchPositionRef.current = touch.clientY;
+      updateDirection(touch.clientY);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType === "mouse") return;
+
+      pointerPositionRef.current = event.clientY;
+      updateDirection(event.clientY);
+    };
+
+    const handleSelectionChange = () => {
+      const view = editorRef.current;
+
+      if (!view || view.state.selection.main.empty) {
+        stopAutoScroll();
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchPositionRef.current = null;
+      stopAutoScroll();
+    };
+
+    const handlePointerEnd = () => {
+      pointerPositionRef.current = null;
+      stopAutoScroll();
+    };
+
+    document.addEventListener(
+      "touchmove",
+      handleTouchMove,
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "pointermove",
+      handlePointerMove,
+      { passive: true },
+    );
+
+    document.addEventListener(
+      "touchend",
+      handleTouchEnd,
+    );
+
+    document.addEventListener(
+      "touchcancel",
+      handleTouchEnd,
+    );
+
+    document.addEventListener(
+      "pointerup",
+      handlePointerEnd,
+    );
+
+    document.addEventListener(
+      "pointercancel",
+      handlePointerEnd,
+    );
+
+    document.addEventListener(
+      "selectionchange",
+      handleSelectionChange,
+    );
+
+    return () => {
+      stopAutoScroll();
+
+      document.removeEventListener(
+        "touchmove",
+        handleTouchMove,
+      );
+
+      document.removeEventListener(
+        "pointermove",
+        handlePointerMove,
+      );
+
+      document.removeEventListener(
+        "touchend",
+        handleTouchEnd,
+      );
+
+      document.removeEventListener(
+        "touchcancel",
+        handleTouchEnd,
+      );
+
+      document.removeEventListener(
+        "pointerup",
+        handlePointerEnd,
+      );
+
+      document.removeEventListener(
+        "pointercancel",
+        handlePointerEnd,
+      );
+
+      document.removeEventListener(
+        "selectionchange",
+        handleSelectionChange,
+      );
+    };
+  }, []);
+
+  const focusEditor = () => {
+    editorRef.current?.focus();
   };
 
+  const getSelection = () => {
+    const view = editorRef.current;
+
+    if (!view) return null;
+
+    const selection = view.state.selection.main;
+
+    return {
+      view,
+      from: selection.from,
+      to: selection.to,
+      selectedText: view.state.doc.sliceString(
+        selection.from,
+        selection.to,
+      ),
+    };
+  };
+
+  const replaceSelection = (
+    text: string,
+    selection?: {
+      anchor: number;
+      head?: number;
+    },
+  ) => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { view, from, to } = state;
+
+    view.dispatch({
+      changes: {
+        from,
+        to,
+        insert: text,
+      },
+      selection: selection
+        ? EditorSelection.range(
+            selection.anchor,
+            selection.head ?? selection.anchor,
+          )
+        : EditorSelection.cursor(from + text.length),
+    });
+
+    setContent(view.state.doc.toString());
+    focusEditor();
+  };
+
+  const wrapSelection = (
+    prefix: string,
+    suffix: string,
+    fallback: string,
+  ) => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { from, selectedText } = state;
+
+    const innerText = selectedText || fallback;
+
+    const insertedText =
+      `${prefix}${innerText}${suffix}`;
+
+    const nextSelection = selectedText
+      ? {
+          anchor: from + insertedText.length,
+        }
+      : {
+          anchor: from + prefix.length,
+          head: from + prefix.length + innerText.length,
+        };
+
+    replaceSelection(insertedText, nextSelection);
+  };
+
+  const insertLink = () => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { from, selectedText } = state;
+
+    const label =
+      selectedText ||
+      t("markdown_editor.placeholder.link_text");
+
+    const url =
+      t("markdown_editor.placeholder.link_url");
+
+    const prefix = `[${label}](`;
+
+    const insertedText = `${prefix}${url})`;
+
+    replaceSelection(insertedText, {
+      anchor: from + prefix.length,
+      head: from + prefix.length + url.length,
+    });
+  };
+
+  const insertMarkdownImage = () => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { from, selectedText } = state;
+
+    const alt =
+      selectedText ||
+      t("markdown_editor.placeholder.image_alt");
+
+    const url =
+      t("markdown_editor.placeholder.image_url");
+
+    const prefix = `![${alt}](`;
+
+    const insertedText = `${prefix}${url})`;
+
+    replaceSelection(insertedText, {
+      anchor: from + prefix.length,
+      head: from + prefix.length + url.length,
+    });
+  };
+
+  const insertCodeBlock = () => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { from, selectedText } = state;
+
+    const innerText =
+      selectedText ||
+      t("markdown_editor.placeholder.code_block");
+
+    const prefix = "```\n";
+
+    const insertedText =
+      `${prefix}${innerText}\n\`\`\``;
+
+    replaceSelection(
+      insertedText,
+      selectedText
+        ? {
+            anchor: from + insertedText.length,
+          }
+        : {
+            anchor: from + prefix.length,
+            head: from + prefix.length + innerText.length,
+          },
+    );
+  };
+
+  const insertHorizontalRule = () => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { from, to } = state;
+
+    const text = "\n---\n";
+
+    state.view.dispatch({
+      changes: {
+        from,
+        to,
+        insert: text,
+      },
+      selection: EditorSelection.cursor(
+        from + text.length,
+      ),
+    });
+
+    setContent(state.view.state.doc.toString());
+    focusEditor();
+  };
+
+  const formatSelectedLines = (
+    formatter: (line: string, index: number) => string,
+    emptyLineFallback: string,
+  ) => {
+    const state = getSelection();
+
+    if (!state) return;
+
+    const { view, from, to } = state;
+
+    const doc = view.state.doc;
+
+    const startLine = doc.lineAt(from);
+    const endLine = doc.lineAt(to);
+
+    const actualEndLine =
+      endLine.number > startLine.number &&
+      to === endLine.from
+        ? doc.line(endLine.number - 1)
+        : endLine;
+
+    const isEmptySingleLine =
+      from === to &&
+      startLine.text.trim().length === 0;
+
+    const lines = isEmptySingleLine
+      ? [emptyLineFallback]
+      : Array.from(
+          {
+            length:
+              actualEndLine.number -
+              startLine.number +
+              1,
+          },
+          (_, index) =>
+            formatter(
+              doc.line(
+                startLine.number + index,
+              ).text,
+              index,
+            ),
+        );
+
+    const insertedText = lines.join("\n");
+
+    view.dispatch({
+      changes: {
+        from: startLine.from,
+        to: actualEndLine.to,
+        insert: insertedText,
+      },
+      selection: EditorSelection.cursor(
+        startLine.from + insertedText.length,
+      ),
+    });
+
+    setContent(view.state.doc.toString());
+    focusEditor();
+  };
+
+  const formatHeading = () => {
+    formatSelectedLines(
+      (line) =>
+        line.startsWith("#")
+          ? `## ${line.replace(/^#+\s*/, "")}`
+          : `## ${line}`,
+      `## ${t("markdown_editor.placeholder.heading")}`,
+    );
+  };
+
+  const formatQuote = () => {
+    formatSelectedLines(
+      (line) =>
+        line.startsWith("> ")
+          ? line
+          : `> ${line}`,
+      `> ${t("markdown_editor.placeholder.quote")}`,
+    );
+  };
+
+  const formatUnorderedList = () => {
+    formatSelectedLines(
+      (line) =>
+        /^\s*[-*]\s/.test(line)
+          ? line
+          : `- ${line}`,
+      `- ${t("markdown_editor.placeholder.list_item")}`,
+    );
+  };
+
+  const formatOrderedList = () => {
+    formatSelectedLines(
+      (line, index) =>
+        /^\s*\d+\.\s/.test(line)
+          ? line
+          : `${index + 1}. ${line}`,
+      `1. ${t("markdown_editor.placeholder.list_item")}`,
+    );
+  };
+
+  const uploadImages = async (
+    files: File[],
+    position?: number,
+  ) => {
+    const imageFiles = files.filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) return;
+
+    const oversized = imageFiles.find(
+      (file) => file.size > 5 * 1024000,
+    );
+
+    if (oversized) {
+      showAlert(
+        t("upload.failed$size", { size: 5 }),
+      );
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const markdownImages: string[] = [];
+
+      for (const file of imageFiles) {
+        const result = await uploadImageFile(file);
+
+        markdownImages.push(
+          buildMarkdownImage(
+            file.name,
+            result.url,
+            {
+              blurhash: result.blurhash,
+              width: result.width,
+              height: result.height,
+            },
+          ),
+        );
+      }
+
+      const view = editorRef.current;
+
+      if (!view) return;
+
+      const insertAt =
+        position ?? view.state.selection.main.head;
+
+      const text = markdownImages.join("\n");
+
+      view.dispatch({
+        changes: {
+          from: insertAt,
+          insert: text,
+        },
+        selection: EditorSelection.cursor(
+          insertAt + text.length,
+        ),
+      });
+
+      setContent(view.state.doc.toString());
+      view.focus();
+    } catch (error) {
+      console.error(error);
+
+      showAlert(
+        error instanceof Error
+          ? error.message
+          : t("upload.failed"),
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePaste = (
+    event: React.ClipboardEvent<HTMLDivElement>,
+  ) => {
+    const files = Array.from(
+      event.clipboardData.files,
+    );
+
+    if (files.length === 0) return;
+
+    const imageFiles = files.filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) return;
+
+    event.preventDefault();
+
+    const view = editorRef.current;
+
+    if (!view) return;
+
+    const position =
+      view.state.selection.main.head;
+
+    void uploadImages(imageFiles, position);
+  };
+
+  const handleDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
+    const files = Array.from(
+      event.dataTransfer.files,
+    );
+
+    if (files.length === 0) return;
+
+    const imageFiles = files.filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) return;
+
+    event.preventDefault();
+
+    const view = editorRef.current;
+
+    if (!view) return;
+
+    const position =
+      view.posAtCoords({
+        x: event.clientX,
+        y: event.clientY,
+      }) ?? view.state.selection.main.head;
+
+    void uploadImages(imageFiles, position);
+  };
+
+  const markdownActions = [
+    {
+      key: "heading",
+      icon: "ri-heading",
+      label: t("markdown_editor.toolbar.heading"),
+      onClick: formatHeading,
+    },
+    {
+      key: "bold",
+      icon: "ri-bold",
+      label: t("markdown_editor.toolbar.bold"),
+      onClick: () =>
+        wrapSelection(
+          "**",
+          "**",
+          t("markdown_editor.placeholder.bold"),
+        ),
+    },
+    {
+      key: "italic",
+      icon: "ri-italic",
+      label: t("markdown_editor.toolbar.italic"),
+      onClick: () =>
+        wrapSelection(
+          "*",
+          "*",
+          t("markdown_editor.placeholder.italic"),
+        ),
+    },
+    {
+      key: "link",
+      icon: "ri-link",
+      label: t("markdown_editor.toolbar.link"),
+      onClick: insertLink,
+    },
+    {
+      key: "image",
+      icon: "ri-image-line",
+      label: t("markdown_editor.toolbar.image"),
+      onClick: insertMarkdownImage,
+    },
+    {
+      key: "quote",
+      icon: "ri-double-quotes-l",
+      label: t("markdown_editor.toolbar.quote"),
+      onClick: formatQuote,
+    },
+    {
+      key: "unordered-list",
+      icon: "ri-list-unordered",
+      label: t("markdown_editor.toolbar.unordered_list"),
+      onClick: formatUnorderedList,
+    },
+    {
+      key: "ordered-list",
+      icon: "ri-list-ordered",
+      label: t("markdown_editor.toolbar.ordered_list"),
+      onClick: formatOrderedList,
+    },
+    {
+      key: "inline-code",
+      icon: "ri-code-s-slash-line",
+      label: t("markdown_editor.toolbar.inline_code"),
+      onClick: () =>
+        wrapSelection(
+          "`",
+          "`",
+          t("markdown_editor.placeholder.code"),
+        ),
+    },
+    {
+      key: "code-block",
+      icon: "ri-code-box-line",
+      label: t("markdown_editor.toolbar.code_block"),
+      onClick: insertCodeBlock,
+    },
+    {
+      key: "horizontal-rule",
+      icon: "ri-separator",
+      label: t("markdown_editor.toolbar.horizontal_rule"),
+      onClick: insertHorizontalRule,
+    },
+  ];
+
+  function UploadImageButton() {
+    const uploadRef = useRef<HTMLInputElement>(null);
+
+    const upChange = (
+      event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+      const files = Array.from(
+        event.currentTarget.files ?? [],
+      );
+
+      if (files.length > 0) {
+        void uploadImages(files);
+      }
+
+      event.currentTarget.value = "";
+    };
+
+    return (
+      <>
+        <input
+          ref={uploadRef}
+          onChange={upChange}
+          className="hidden"
+          type="file"
+          accept="image/gif,image/jpeg,image/jpg,image/png,image/svg+xml"
+        />
+
+        <MarkdownToolButton
+          label={t("markdown_editor.toolbar.upload_image")}
+          icon="ri-image-add-line"
+          disabled={uploading}
+          onClick={() => uploadRef.current?.click()}
+        />
+      </>
+    );
+  }
+
   return (
-    <>
-      {Content}
-      <Lightbox
-        plugins={[Download, Zoom, Counter]}
-        index={index}
-        slides={slides.current}
-        open={index >= 0}
-        close={() => setIndex(-1)}
-      />
-    </>
+    <div className="flex flex-col gap-0 sm:gap-3">
+      <FlatInset className="flex flex-wrap items-center gap-2 border-0 border-b border-black/10 rounded-none bg-transparent p-2 dark:border-white/10 sm:p-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-1">
+          <FlatTabButton
+            active={preview === "edit"}
+            onClick={() => setPreview("edit")}
+          >
+            {t("edit")}
+          </FlatTabButton>
+
+          <FlatTabButton
+            active={preview === "preview"}
+            onClick={() => setPreview("preview")}
+          >
+            {t("preview")}
+          </FlatTabButton>
+
+          <FlatTabButton
+            active={preview === "comparison"}
+            onClick={() => setPreview("comparison")}
+          >
+            {t("comparison")}
+          </FlatTabButton>
+        </div>
+
+        <div className="flex-grow" />
+
+        <div
+          className="flex min-w-0 flex-wrap items-center gap-1"
+          role="toolbar"
+          aria-label={t("markdown_editor.toolbar.label")}
+        >
+          {markdownActions.map((action) => (
+            <MarkdownToolButton
+              key={action.key}
+              label={action.label}
+              icon={action.icon}
+              onClick={action.onClick}
+            />
+          ))}
+
+          <span
+            className="mx-1 hidden h-6 w-px bg-black/10 dark:bg-white/10 sm:block"
+            aria-hidden="true"
+          />
+
+          <UploadImageButton />
+        </div>
+
+        {uploading && (
+          <div className="flex flex-row items-center space-x-2 px-2">
+            <Loading
+              type="spin"
+              color="#FC466B"
+              height={16}
+              width={16}
+            />
+            <span className="text-sm text-neutral-500">
+              {t("uploading")}
+            </span>
+          </div>
+        )}
+      </FlatInset>
+
+      <div
+        className={`grid grid-cols-1 gap-0 sm:gap-4 ${
+          preview === "comparison"
+            ? "lg:grid-cols-2"
+            : ""
+        }`}
+      >
+        <div
+          className={
+            "flex min-w-0 flex-col " +
+            (preview === "preview" ? "hidden" : "")
+          }
+        >
+          <div
+            className="markdown-cm-wrapper relative min-h-0 rounded-none border-0 bg-w"
+            style={{ height }}
+            onPaste={handlePaste}
+            onDragOver={(event) =>
+              event.preventDefault()
+            }
+            onDrop={handleDrop}
+          >
+            <CodeMirror
+              value={content}
+              height={height}
+              extensions={extensions}
+              theme={
+                colorMode === "dark"
+                  ? oneDark
+                  : "light"
+              }
+              onCreateEditor={(view) => {
+                editorRef.current = view;
+              }}
+              onChange={(value) => {
+                setContent(value);
+              }}
+              placeholder={placeholder}
+              basicSetup={{
+                lineNumbers: false,
+                foldGutter: false,
+                highlightActiveLineGutter: false,
+                highlightActiveLine: false,
+                searchKeymap: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+              }}
+            />
+          </div>
+        </div>
+
+        <div
+          className={
+            "min-h-0 overflow-y-auto rounded-none border-0 bg-w px-4 py-4 border-t sm:border-none " +
+            (preview === "edit" ? "hidden" : "")
+          }
+          style={{ height }}
+        >
+          <Markdown
+            content={content ? content : placeholder}
+          />
+        </div>
+      </div>
+
+      <AlertUI />
+    </div>
   );
 }
