@@ -9,6 +9,11 @@ import { useSiteConfig } from "../hooks/useSiteConfig";
 import { siteName } from "../utils/constants";
 import type { PendingComment } from "../api/client";
 
+type ConfirmAction = {
+  type: "approve" | "delete";
+  comment: PendingComment;
+} | null;
+
 export function CommentsPage() {
   useTranslation();
 
@@ -20,6 +25,7 @@ export function CommentsPage() {
   const [processing, setProcessing] = useState<number | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
   const loadComments = useCallback(async () => {
     setLoading(true);
@@ -34,7 +40,7 @@ export function CommentsPage() {
       if (data) {
         setComments(data);
       }
-    } catch (error) {
+    } catch {
       showAlert("加载评论失败，请稍后重试");
     } finally {
       setLoading(false);
@@ -45,51 +51,46 @@ export function CommentsPage() {
     loadComments();
   }, [loadComments]);
 
-  async function approveComment(id: number) {
-    if (processing !== null || bulkDeleting) return;
-
-    setProcessing(id);
-
-    try {
-      const { error } = await client.comment.approve(id);
-
-      if (error) {
-        showAlert(error.value as string);
-      } else {
-        setComments((previous) =>
-          previous.filter((comment) => comment.id !== id)
-        );
-        showAlert("评论已批准并公开");
-      }
-    } catch (error) {
-      showAlert("批准评论失败，请稍后重试");
-    } finally {
-      setProcessing(null);
-    }
-  }
-
-  async function deleteComment(id: number) {
-    if (processing !== null || bulkDeleting) return;
-
-    if (!window.confirm("确定要删除这条评论吗？此操作不可撤销。")) {
+  async function executeConfirmAction() {
+    if (!confirmAction || processing !== null || bulkDeleting) {
       return;
     }
 
+    const { type, comment } = confirmAction;
+    const id = comment.id;
+
     setProcessing(id);
 
     try {
-      const { error } = await client.comment.delete(id);
+      if (type === "approve") {
+        const { error } = await client.comment.approve(id);
 
-      if (error) {
-        showAlert(error.value as string);
+        if (error) {
+          showAlert(error.value as string);
+          return;
+        }
+
+        setConfirmAction(null);
+        showAlert("评论已批准并公开");
+        await loadComments();
       } else {
-        setComments((previous) =>
-          previous.filter((comment) => comment.id !== id)
-        );
+        const { error } = await client.comment.delete(id);
+
+        if (error) {
+          showAlert(error.value as string);
+          return;
+        }
+
+        setConfirmAction(null);
         showAlert("评论已删除");
+        await loadComments();
       }
-    } catch (error) {
-      showAlert("删除评论失败，请稍后重试");
+    } catch {
+      showAlert(
+        type === "approve"
+          ? "批准评论失败，请稍后重试"
+          : "删除评论失败，请稍后重试"
+      );
     } finally {
       setProcessing(null);
     }
@@ -117,7 +118,7 @@ export function CommentsPage() {
       showAlert(`已删除 ${deletedCount} 条待审核评论`);
 
       await loadComments();
-    } catch (error) {
+    } catch {
       showAlert("批量删除失败，请稍后重试");
     } finally {
       setBulkDeleting(false);
@@ -133,6 +134,33 @@ export function CommentsPage() {
 
     return date.toLocaleString();
   }
+
+  function getCommentEmail(comment: PendingComment) {
+    const user = comment.user as
+      | { email?: string | null }
+      | null
+      | undefined;
+
+    return (
+      user?.email?.trim() ||
+      comment.guestEmail?.trim() ||
+      "未填写"
+    );
+  }
+
+  function getCommentName(comment: PendingComment) {
+    return (
+      comment.user?.username ||
+      comment.guestName ||
+      "游客"
+    );
+  }
+
+  const actionComment = confirmAction?.comment;
+  const actionType = confirmAction?.type;
+  const isActionProcessing =
+    actionComment !== undefined &&
+    processing === actionComment.id;
 
   return (
     <>
@@ -168,6 +196,7 @@ export function CommentsPage() {
                   loading ||
                   bulkDeleting ||
                   processing !== null ||
+                  confirmAction !== null ||
                   comments.length === 0
                 }
                 className="rounded-xl border border-red-500/40 px-4 py-2.5 text-sm text-red-500 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
@@ -178,7 +207,12 @@ export function CommentsPage() {
               <button
                 type="button"
                 onClick={loadComments}
-                disabled={loading || bulkDeleting || processing !== null}
+                disabled={
+                  loading ||
+                  bulkDeleting ||
+                  processing !== null ||
+                  confirmAction !== null
+                }
                 className="rounded-xl bg-theme px-4 py-2.5 text-sm text-white transition hover:bg-theme-hover disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "正在刷新..." : "刷新列表"}
@@ -220,14 +254,8 @@ export function CommentsPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {comments.map((comment) => {
-              const name =
-                comment.user?.username ||
-                comment.guestName ||
-                "游客";
-
-              const guestEmail = comment.user
-                ? null
-                : comment.guestEmail?.trim() || null;
+              const name = getCommentName(comment);
+              const guestEmail = getCommentEmail(comment);
 
               return (
                 <FlatPanel
@@ -246,11 +274,9 @@ export function CommentsPage() {
                         </span>
                       </div>
 
-                      {guestEmail && (
-                        <p className="mt-2 break-all text-sm text-theme">
-                          游客邮箱：{guestEmail}
-                        </p>
-                      )}
+                      <p className="mt-2 break-all text-sm text-theme">
+                        邮箱：{guestEmail}
+                      </p>
 
                       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                         文章：{comment.feed?.title || "文章已不存在"}
@@ -266,31 +292,45 @@ export function CommentsPage() {
                     </span>
                   </div>
 
-                  <div className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-secondary p-4 text-sm leading-7">
+                  <div className="mt-4 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-secondary p-4 text-sm leading-7">
                     {comment.content}
                   </div>
 
                   <div className="mt-4 flex flex-wrap justify-end gap-3">
                     <button
                       type="button"
-                      onClick={() => deleteComment(comment.id)}
-                      disabled={processing !== null || bulkDeleting}
+                      onClick={() =>
+                        setConfirmAction({
+                          type: "delete",
+                          comment,
+                        })
+                      }
+                      disabled={
+                        processing !== null ||
+                        bulkDeleting ||
+                        confirmAction !== null
+                      }
                       className="rounded-xl border border-red-500/30 px-4 py-2.5 text-sm text-red-500 transition hover:bg-red-500/10 disabled:opacity-50"
                     >
-                      {processing === comment.id
-                        ? "处理中..."
-                        : "删除评论"}
+                      删除评论
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => approveComment(comment.id)}
-                      disabled={processing !== null || bulkDeleting}
+                      onClick={() =>
+                        setConfirmAction({
+                          type: "approve",
+                          comment,
+                        })
+                      }
+                      disabled={
+                        processing !== null ||
+                        bulkDeleting ||
+                        confirmAction !== null
+                      }
                       className="rounded-xl bg-theme px-5 py-2.5 text-sm text-white transition hover:bg-theme-hover disabled:opacity-50"
                     >
-                      {processing === comment.id
-                        ? "处理中..."
-                        : "批准并公开"}
+                      批准并公开
                     </button>
                   </div>
                 </FlatPanel>
@@ -299,6 +339,138 @@ export function CommentsPage() {
           </div>
         )}
       </div>
+
+      {confirmAction && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-black/60 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              processing === null
+            ) {
+              setConfirmAction(null);
+            }
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="comment-confirm-title"
+            aria-describedby="comment-confirm-description"
+            className="my-auto w-full max-w-lg rounded-2xl border border-black/10 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-neutral-900 sm:p-6"
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl ${
+                  actionType === "delete"
+                    ? "bg-red-500/10 text-red-500"
+                    : "bg-theme/10 text-theme"
+                }`}
+              >
+                {actionType === "delete" ? "!" : "✓"}
+              </div>
+
+              <h2
+                id="comment-confirm-title"
+                className="text-lg font-semibold"
+              >
+                {actionType === "delete"
+                  ? "删除评论确认"
+                  : "通过评论确认"}
+              </h2>
+            </div>
+
+            <div className="mt-5 space-y-3 rounded-xl bg-secondary p-4">
+              <div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  评论发布者
+                </p>
+
+                <p className="mt-1 break-words text-sm font-semibold">
+                  {getCommentName(confirmAction.comment)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  发布者邮箱
+                </p>
+
+                <p className="mt-1 break-all text-sm">
+                  {getCommentEmail(confirmAction.comment)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  评论内容
+                </p>
+
+                <div className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-black/5 bg-white p-3 text-sm leading-7 dark:border-white/10 dark:bg-neutral-800">
+                  {confirmAction.comment.content}
+                </div>
+              </div>
+            </div>
+
+            <p
+              id="comment-confirm-description"
+              className={`mt-5 text-sm leading-7 ${
+                actionType === "delete"
+                  ? "text-red-500"
+                  : "text-neutral-600 dark:text-neutral-300"
+              }`}
+            >
+              {actionType === "delete"
+                ? "确认删除这一条评论吗？操作无法恢复。"
+                : "你必须确认该评论符合法律法规再通过。"}
+            </p>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                disabled={isActionProcessing}
+                className="rounded-xl border border-black/10 px-5 py-2.5 text-sm transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5"
+              >
+                取消
+              </button>
+
+              {actionType === "delete" ? (
+                <button
+                  type="button"
+                  onClick={executeConfirmAction}
+                  disabled={isActionProcessing}
+                  className="flex min-w-[132px] items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isActionProcessing && (
+                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  )}
+
+                  <span>
+                    {isActionProcessing ? "正在删除..." : "确认删除"}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={executeConfirmAction}
+                  disabled={isActionProcessing}
+                  className="flex min-w-[132px] items-center justify-center gap-2 rounded-xl bg-theme px-5 py-2.5 text-sm text-white transition hover:bg-theme-hover disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isActionProcessing && (
+                    <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  )}
+
+                  <span>
+                    {isActionProcessing ? "正在通过..." : "确认通过"}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showBulkConfirm && (
         <div
