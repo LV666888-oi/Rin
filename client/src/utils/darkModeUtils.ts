@@ -1,24 +1,48 @@
 import { useState, useEffect } from "react";
 
+type ThemeMode = "light" | "dark" | "system";
+
+function applyColorMode(mode: ThemeMode) {
+  let actualMode: "light" | "dark";
+
+  if (mode === "dark" || mode === "light") {
+    actualMode = mode;
+  } else {
+    actualMode = window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+
+  document.documentElement.setAttribute("data-color-mode", actualMode);
+
+  window.dispatchEvent(new Event("colorSchemeChange"));
+}
+
 export function listenSystemMode() {
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
   function darkModeHandler() {
-    const mode = localStorage.getItem("theme");
-    if (mode === null || mode === "system") {
-      if (mediaQuery.matches) {
-        document.documentElement.setAttribute("data-color-mode", "dark");
-      } else {
-        document.documentElement.setAttribute("data-color-mode", "light");
-      }
-      window.dispatchEvent(new Event("colorSchemeChange"));
-    }
+    const savedMode = localStorage.getItem("theme");
+
+    const mode: ThemeMode =
+      savedMode === "dark" || savedMode === "light"
+        ? savedMode
+        : "system";
+
+    applyColorMode(mode);
   }
 
-  // 判断当前模式
+  // 页面启动时立即恢复用户保存的主题
   darkModeHandler();
-  // 监听模式变化
-  mediaQuery.addEventListener("change", darkModeHandler);
+
+  // 监听系统主题变化
+  mediaQuery.addEventListener("change", () => {
+    const mode = localStorage.getItem("theme");
+
+    if (mode === null || mode === "system") {
+      applyColorMode("system");
+    }
+  });
 }
 
 export function getCurrentColorMode(): "light" | "dark" {
@@ -39,13 +63,10 @@ export function useColorMode() {
       setColorMode(getCurrentColorMode());
     };
 
-    // 初始设置
     updateColorMode();
 
-    // 监听颜色模式变化事件
     window.addEventListener("colorSchemeChange", updateColorMode);
 
-    // 清理函数
     return () => {
       window.removeEventListener("colorSchemeChange", updateColorMode);
     };
