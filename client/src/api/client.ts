@@ -335,6 +335,10 @@ class CommentAPI {
   async pending(): Promise<ApiResponse<PendingComment[]>> {
     return this.http.get<PendingComment[]>("/api/comment/admin/pending");
   }
+  // DELETE /api/comment/admin/pending
+  async deletePending(): Promise<ApiResponse<{ success: boolean; deletedCount: number }>> {
+    return this.http.delete<{ success: boolean; deletedCount: number }>("/api/comment/admin/pending");
+  }
   // POST /api/comment/admin/:id/approve
   async approve(id: number): Promise<ApiResponse<{ success: boolean }>> {
     return this.http.post<{ success: boolean }>(`/api/comment/admin/${id}/approve`);
