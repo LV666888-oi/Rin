@@ -6,6 +6,16 @@ import { profileAsync } from "../core/server-timing";
 import { notify } from "../utils/webhook";
 import { resolveWebhookConfig } from "./config-helpers";
 
+const MAX_COMMENT_LENGTH = 200;
+
+function getCharacterLength(value: string): number {
+    return Array.from(value).length;
+}
+
+function exceedsLimit(value: string): boolean {
+    return getCharacterLength(value) > MAX_COMMENT_LENGTH;
+}
+
 async function verifyCommentTurnstile(
     secret: string,
     token: string,
@@ -203,6 +213,10 @@ export function CommentService(): Hono {
             c.req.json()
         );
 
+        if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return c.text('Invalid comment data', 400);
+        }
+
         const {
             content,
             guestName,
@@ -211,8 +225,39 @@ export function CommentService(): Hono {
             turnstileToken,
         } = body;
 
+        // Validate comment content
         if (!content || typeof content !== 'string' || !content.trim()) {
             return c.text('Content is required', 400);
+        }
+
+        if (exceedsLimit(content)) {
+            return c.text('评论内容不能超过200个字符', 400);
+        }
+
+        // Validate guest name
+        if (
+            guestName !== undefined &&
+            guestName !== null &&
+            typeof guestName !== 'string'
+        ) {
+            return c.text('Invalid guest name', 400);
+        }
+
+        if (typeof guestName === 'string' && exceedsLimit(guestName)) {
+            return c.text('用户名不能超过200个字符', 400);
+        }
+
+        // Validate guest email
+        if (
+            guestEmail !== undefined &&
+            guestEmail !== null &&
+            typeof guestEmail !== 'string'
+        ) {
+            return c.text('Invalid guest email', 400);
+        }
+
+        if (typeof guestEmail === 'string' && exceedsLimit(guestEmail)) {
+            return c.text('邮箱不能超过200个字符', 400);
         }
 
         const exist = await profileAsync(c, 'comment_create_feed', () =>
@@ -264,6 +309,22 @@ export function CommentService(): Hono {
 
             if (!user) {
                 return c.text('User not found', 400);
+            }
+
+            // Validate registered username
+            if (
+                typeof user.username !== 'string' ||
+                exceedsLimit(user.username)
+            ) {
+                return c.text('用户名不能超过200个字符', 400);
+            }
+
+            // Validate registered email
+            if (
+                typeof user.email !== 'string' ||
+                exceedsLimit(user.email)
+            ) {
+                return c.text('邮箱不能超过200个字符', 400);
             }
 
             await db.insert(comments).values({
