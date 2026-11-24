@@ -8,35 +8,27 @@ import { useAlert } from "../components/dialog";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { siteName } from "../utils/constants";
 import type { PendingComment } from "../api/client";
-
 type ConfirmAction = {
   type: "approve" | "delete";
   comment: PendingComment;
 } | null;
-
 export function CommentsPage() {
   useTranslation();
-
   const siteConfig = useSiteConfig();
   const { showAlert, AlertUI } = useAlert();
-
   const [comments, setComments] = useState<PendingComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<number | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
-
   const loadComments = useCallback(async () => {
     setLoading(true);
-
     try {
       const { data, error } = await client.comment.pending();
-
       if (error) {
         showAlert(error.value as string);
       }
-
       if (data) {
         setComments(data);
       }
@@ -46,41 +38,32 @@ export function CommentsPage() {
       setLoading(false);
     }
   }, [showAlert]);
-
   useEffect(() => {
     loadComments();
   }, [loadComments]);
-
   async function executeConfirmAction() {
     if (!confirmAction || processing !== null || bulkDeleting) {
       return;
     }
-
     const { type, comment } = confirmAction;
     const id = comment.id;
-
     setProcessing(id);
-
     try {
       if (type === "approve") {
         const { error } = await client.comment.approve(id);
-
         if (error) {
           showAlert(error.value as string);
           return;
         }
-
         setConfirmAction(null);
         showAlert("评论已批准并公开");
         await loadComments();
       } else {
         const { error } = await client.comment.delete(id);
-
         if (error) {
           showAlert(error.value as string);
           return;
         }
-
         setConfirmAction(null);
         showAlert("评论已删除");
         await loadComments();
@@ -95,28 +78,20 @@ export function CommentsPage() {
       setProcessing(null);
     }
   }
-
   async function deleteAllPendingComments() {
     if (bulkDeleting || processing !== null || comments.length === 0) {
       return;
     }
-
     setBulkDeleting(true);
-
     try {
       const { data, error } = await client.comment.deletePending();
-
       if (error) {
         showAlert(error.value as string);
         return;
       }
-
       setShowBulkConfirm(false);
-
       const deletedCount = data?.deletedCount ?? 0;
-
       showAlert(`已删除 ${deletedCount} 条待审核评论`);
-
       await loadComments();
     } catch {
       showAlert("批量删除失败，请稍后重试");
@@ -124,30 +99,24 @@ export function CommentsPage() {
       setBulkDeleting(false);
     }
   }
-
   function formatDate(value: string | number) {
     const date = new Date(value);
-
     if (Number.isNaN(date.getTime())) {
       return "时间未知";
     }
-
     return date.toLocaleString();
   }
-
   function getCommentEmail(comment: PendingComment) {
     const user = comment.user as
       | { email?: string | null }
       | null
       | undefined;
-
     return (
       user?.email?.trim() ||
       comment.guestEmail?.trim() ||
       "未填写"
     );
   }
-
   function getCommentName(comment: PendingComment) {
     return (
       comment.user?.username ||
@@ -155,13 +124,11 @@ export function CommentsPage() {
       "游客"
     );
   }
-
   const actionComment = confirmAction?.comment;
   const actionType = confirmAction?.type;
   const isActionProcessing =
     actionComment !== undefined &&
     processing === actionComment.id;
-
   return (
     <>
       <Helmet>
@@ -170,7 +137,6 @@ export function CommentsPage() {
         <meta property="og:title" content="评论审核" />
         <meta property="og:image" content={siteConfig.avatar} />
       </Helmet>
-
       <div className="mt-2 flex flex-col gap-4 t-primary sm:gap-6">
         <FlatPanel className="p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -178,16 +144,13 @@ export function CommentsPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-theme/70">
                 ADMINISTRATION
               </p>
-
               <h1 className="mt-2 text-xl font-semibold">
                 评论审核
               </h1>
-
               <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
                 审核游客和普通用户提交的评论，批准后才会公开显示。
               </p>
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -203,7 +166,6 @@ export function CommentsPage() {
               >
                 全部拒审
               </button>
-
               <button
                 type="button"
                 onClick={loadComments}
@@ -219,22 +181,18 @@ export function CommentsPage() {
               </button>
             </div>
           </div>
-
           <div className="mt-5 flex items-center gap-2 border-t border-black/5 pt-4 dark:border-white/5">
             <span className="text-sm text-neutral-500 dark:text-neutral-400">
               待审核评论
             </span>
-
             <span className="rounded-lg bg-theme/10 px-2.5 py-1 text-sm font-semibold text-theme">
               {comments.length}
             </span>
           </div>
         </FlatPanel>
-
         {loading ? (
           <FlatPanel className="flex items-center justify-center gap-3 p-10">
             <Loading type="spin" height={22} width={22} />
-
             <span className="text-sm text-neutral-500">
               正在加载评论...
             </span>
@@ -242,11 +200,9 @@ export function CommentsPage() {
         ) : comments.length === 0 ? (
           <FlatPanel className="p-10 text-center">
             <div className="text-3xl">✓</div>
-
             <p className="mt-3 font-medium">
               目前没有待审核评论
             </p>
-
             <p className="mt-2 text-sm text-neutral-500">
               新提交的评论会显示在这里。
             </p>
@@ -256,46 +212,43 @@ export function CommentsPage() {
             {comments.map((comment) => {
               const name = getCommentName(comment);
               const guestEmail = getCommentEmail(comment);
-
               return (
                 <FlatPanel
                   key={comment.id}
                   className="overflow-hidden p-4 sm:p-6"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold">
+                        <div className="max-h-16 min-w-0 max-w-full overflow-y-auto overscroll-contain break-all rounded-lg bg-secondary px-3 py-2 text-sm font-semibold leading-6">
                           {name}
-                        </span>
-
+                        </div>
                         <span className="rounded-md bg-yellow-500/10 px-2 py-1 text-xs text-yellow-600 dark:text-yellow-400">
                           待审核
                         </span>
                       </div>
-
-                      <p className="mt-2 break-all text-sm text-theme">
-                        邮箱：{guestEmail}
-                      </p>
-
+                      <div className="mt-2">
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                          邮箱：
+                        </p>
+                        <div className="mt-1 max-h-16 min-w-0 max-w-full overflow-y-auto overscroll-contain break-all rounded-lg bg-secondary px-3 py-2 text-sm leading-6 text-theme">
+                          {guestEmail}
+                        </div>
+                      </div>
                       <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                         文章：{comment.feed?.title || "文章已不存在"}
                       </p>
-
                       <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                         提交时间：{formatDate(comment.createdAt)}
                       </p>
                     </div>
-
-                    <span className="text-xs text-neutral-400">
+                    <span className="shrink-0 text-xs text-neutral-400">
                       #{comment.id}
                     </span>
                   </div>
-
                   <div className="mt-4 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-secondary p-4 text-sm leading-7">
                     {comment.content}
                   </div>
-
                   <div className="mt-4 flex flex-wrap justify-end gap-3">
                     <button
                       type="button"
@@ -314,7 +267,6 @@ export function CommentsPage() {
                     >
                       删除评论
                     </button>
-
                     <button
                       type="button"
                       onClick={() =>
@@ -339,7 +291,6 @@ export function CommentsPage() {
           </div>
         )}
       </div>
-
       {confirmAction && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-black/60 p-4"
@@ -370,7 +321,6 @@ export function CommentsPage() {
               >
                 {actionType === "delete" ? "!" : "✓"}
               </div>
-
               <h2
                 id="comment-confirm-title"
                 className="text-lg font-semibold"
@@ -380,39 +330,32 @@ export function CommentsPage() {
                   : "通过评论确认"}
               </h2>
             </div>
-
             <div className="mt-5 space-y-3 rounded-xl bg-secondary p-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   评论发布者
                 </p>
-
-                <p className="mt-1 break-words text-sm font-semibold">
+                <div className="mt-1 max-h-16 min-w-0 max-w-full overflow-y-auto overscroll-contain break-all rounded-lg bg-white p-3 text-sm font-semibold leading-6 dark:bg-neutral-800">
                   {getCommentName(confirmAction.comment)}
-                </p>
+                </div>
               </div>
-
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   发布者邮箱
                 </p>
-
-                <p className="mt-1 break-all text-sm">
+                <div className="mt-1 max-h-16 min-w-0 max-w-full overflow-y-auto overscroll-contain break-all rounded-lg bg-white p-3 text-sm leading-6 dark:bg-neutral-800">
                   {getCommentEmail(confirmAction.comment)}
-                </p>
+                </div>
               </div>
-
               <div>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
                   评论内容
                 </p>
-
                 <div className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-black/5 bg-white p-3 text-sm leading-7 dark:border-white/10 dark:bg-neutral-800">
                   {confirmAction.comment.content}
                 </div>
               </div>
             </div>
-
             <p
               id="comment-confirm-description"
               className={`mt-5 text-sm leading-7 ${
@@ -425,7 +368,6 @@ export function CommentsPage() {
                 ? "确认删除这一条评论吗？操作无法恢复。"
                 : "你必须确认该评论符合法律法规再通过。"}
             </p>
-
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
@@ -435,7 +377,6 @@ export function CommentsPage() {
               >
                 取消
               </button>
-
               {actionType === "delete" ? (
                 <button
                   type="button"
@@ -446,7 +387,6 @@ export function CommentsPage() {
                   {isActionProcessing && (
                     <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   )}
-
                   <span>
                     {isActionProcessing ? "正在删除..." : "确认删除"}
                   </span>
@@ -461,7 +401,6 @@ export function CommentsPage() {
                   {isActionProcessing && (
                     <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                   )}
-
                   <span>
                     {isActionProcessing ? "正在通过..." : "确认通过"}
                   </span>
@@ -471,7 +410,6 @@ export function CommentsPage() {
           </div>
         </div>
       )}
-
       {showBulkConfirm && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
@@ -496,7 +434,6 @@ export function CommentsPage() {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-xl text-red-500">
                 !
               </div>
-
               <h2
                 id="bulk-delete-title"
                 className="text-lg font-semibold"
@@ -504,7 +441,6 @@ export function CommentsPage() {
                 批量拒审确认
               </h2>
             </div>
-
             <p
               id="bulk-delete-description"
               className="mt-5 text-sm leading-7 text-neutral-600 dark:text-neutral-300"
@@ -517,7 +453,6 @@ export function CommentsPage() {
               <br />
               此操作不可撤销，已批准的评论不会受到影响。
             </p>
-
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
@@ -527,7 +462,6 @@ export function CommentsPage() {
               >
                 取消
               </button>
-
               <button
                 type="button"
                 onClick={deleteAllPendingComments}
@@ -547,7 +481,6 @@ export function CommentsPage() {
           </div>
         </div>
       )}
-
       <AlertUI />
     </>
   );
