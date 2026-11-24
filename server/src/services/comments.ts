@@ -319,14 +319,6 @@ export function CommentService(): Hono {
                 return c.text('用户名不能超过200个字符', 400);
             }
 
-            // Validate registered email
-            if (
-                typeof user.email !== 'string' ||
-                exceedsLimit(user.email)
-            ) {
-                return c.text('邮箱不能超过200个字符', 400);
-            }
-
             await db.insert(comments).values({
                 feedId,
                 userId: uid,
